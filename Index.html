@@ -18,7 +18,7 @@
                     <nav class="menu">
                         <ul>
                             <li class="active"><a href="#blockHebergement">Hébergements</a></li>
-                            <li class="second"><a href="activités">Activités</a></li>
+                            <li class="second"><a href="#activityBlock">Activités</a></li>
                         </ul>
                     </nav>
                 </nav>
@@ -45,21 +45,23 @@
                 <div class="filtre marginFiltre">
                     <div class="marginTitle">
                         <h3>Filtres</h3></div>
-                    <div class="borderIcon iconSizeFiltre flexCenter">
-                        <i class="fa-solid fa-money-bill-wave fa-lg iconColor"></i>
-                        <div class="textFilter"><h3>Économiques</h3></div>
-                    </div>
-                    <div class="borderIcon iconSizeFiltre flexCenter">
-                        <i class="fa-solid fa-person fa-lg iconColor"></i>
-                        <div class="textFilter"><h3>Familial</h3></div>
-                    </div>
-                    <div class="borderIcon iconSizeFiltre flexCenter">
-                        <i class="fa-solid fa-heart fa-lg iconColor"></i>
-                        <div class="textFilter"><h3>Romantique</h3></div>
-                    </div>
-                    <div class="borderIcon iconSizeFiltre flexCenter">
-                        <i class="fa-solid fa-dog fa-lg iconColor"></i>
-                        <div class="textFilter"><h3>Animaux autorisés</h3></div>
+                    <div class="filtreContainer">
+                        <div class="borderIcon iconSizeFiltre flexCenter margeIcon">
+                            <i class="fa-solid fa-money-bill-wave fa-lg iconColor"></i>
+                            <div class="textFilter"><h3>Économiques</h3></div>
+                        </div>
+                        <div class="borderIcon iconSizeFiltre flexCenter margeIcon">
+                            <i class="fa-solid fa-person fa-lg iconColor"></i>
+                            <div class="textFilter"><h3>Familial</h3></div>
+                        </div>
+                        <div class="borderIcon iconSizeFiltre flexCenter margeIcon">
+                            <i class="fa-solid fa-heart fa-lg iconColor"></i>
+                            <div class="textFilter"><h3>Romantique</h3></div>
+                        </div>
+                        <div class="borderIcon iconSizeFiltre flexCenter">
+                            <i class="fa-solid fa-dog fa-lg iconColor"></i>
+                            <div class="textFilter"><h3>Animaux autorisés</h3></div>
+                        </div>
                     </div>
                 </div>
                 <div class="flexIcon info">
@@ -78,9 +80,11 @@
                                 <img
                                 src="Images Booki/hebergements/4_small/marcus-loke-WQJvWU_HZFo-unsplash.jpg"
                                 alt="photo Auberge la Cannebière">
-                                <div>
-                                    <h3>Auberge La Cannebière</h3>
-                                    <p>Nuit à partir de 25<span class="BoldPrices">€</span></p>
+                                <div class="cardInside">
+                                    <div class="cardText">
+                                        <h3>Auberge La Cannebière</h3>
+                                        <p>Nuit à partir de 25<span class="BoldPrices">€</span></p>
+                                    </div>
                                     <div class="stars">
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
@@ -96,9 +100,11 @@
                                 <img
                                 src="Images Booki/hebergements/4_small/fred-kleber-gTbaxaVLvsg-unsplash.jpg"
                                 alt="photo Hôtel du port">
-                                <div>
-                                    <h3>Hôtel du Port</h3>
-                                    <p>Nuit à partir de 52<span class="BoldPrices">€</span></p>
+                                <div class="cardInside">
+                                    <div class="cardText">
+                                        <h3>Hôtel du Port</h3>
+                                        <p>Nuit à partir de 52<span class="BoldPrices">€</span></p>
+                                    </div>
                                     <div class="stars">
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
@@ -114,9 +120,11 @@
                                 <img 
                                 src="Images Booki/hebergements/4_small/reisetopia-B8WIgxA_PFU-unsplash.jpg"
                                 alt="photo Hôtel les mouettes">
-                                <div>
-                                    <h3>Hôtel Les mouettes</h3>
-                                    <p>Nuit à partir de 76<span class="BoldPrices">€</span></p>
+                                <div class="cardInside">
+                                    <div class="cardText">
+                                        <h3>Hôtel Les mouettes</h3>
+                                        <p>Nuit à partir de 76<span class="BoldPrices">€</span></p>
+                                    </div>
                                     <div class="stars">
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
@@ -132,9 +140,11 @@
                                 <img 
                                 src="Images Booki/hebergements/4_small/annie-spratt-Eg1qcIitAuA-unsplash.jpg"
                                 alt="photo Hôtel de la mer">
-                                <div>
-                                    <h3>Hôtel de la mer</h3>
-                                    <p>Nuit à partir de 46<span class="BoldPrices">€</span></p>
+                                <div class="cardInside">
+                                    <div class="cardText">
+                                        <h3>Hôtel de la mer</h3>
+                                        <p>Nuit à partir de 46<span class="BoldPrices">€</span></p>
+                                    </div>
                                     <div class="stars">
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
@@ -150,9 +160,11 @@
                                 <img 
                                 src="Images Booki/hebergements/4_small/nicate-lee-kT-ZyaiwBe0-unsplash.jpg"
                                 alt="photo Auberge le Panier">
-                                <div>
-                                    <h3>Auberge Le Panier</h3>
-                                    <p>Nuit à partir de 23<span class="BoldPrices">€</span></p>
+                                <div class="cardInside">
+                                    <div class="cardText">
+                                        <h3>Auberge Le Panier</h3>
+                                        <p>Nuit à partir de 23<span class="BoldPrices">€</span></p>
+                                    </div>
                                     <div class="stars">
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
@@ -168,9 +180,11 @@
                                 <img 
                                 src="Images Booki/hebergements/4_small/febrian-zakaria-M6S1WvfW68A-unsplash.jpg"
                                 alt="photo Hôtel chez Amina">
-                                <div>
-                                    <h3>Hôtel Chez Amina</h3>
-                                    <p>Nuit à partir de 96<span class="BoldPrices">€</span></p>
+                                <div class="cardInside">
+                                    <div class="cardText">
+                                        <h3>Hôtel Chez Amina</h3>
+                                        <p>Nuit à partir de 96<span class="BoldPrices">€</span></p>
+                                    </div>
                                     <div class="stars">
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
                                         <i class="fa-solid fa-star fa-sm iconColor"></i>
@@ -194,7 +208,7 @@
                             <img 
                             src="Images Booki/hebergements/4_small/emile-guillemot-Bj_rcSC5XfE-unsplash.jpg"
                             alt="photo Hôtel Le soleil du matin">
-                            <div>
+                            <div class="popularCardText">
                                 <div class="textCardRight">
                                     <h3>Hôtel Le soleil du matin</h3>
                                     <p>Nuit à partir de 128<span class="BoldPrices">€</span></p>
@@ -214,7 +228,7 @@
                             <img 
                             src="Images Booki/hebergements/4_small/aw-creative-VGs8z60yT2c-unsplash.jpg"
                             alt="photo Chambres d’hôtes Au cœur de l’eau">
-                            <div>
+                            <div class="popularCardText">
                                 <div class="textCardRight">
                                     <h3>Chambres d’hôtes Au cœur de l’eau</h3>
                                     <p>Nuit à partir de 71<span class="BoldPrices">€</span></p>
@@ -234,7 +248,7 @@
                             <img 
                             src="Images Booki/hebergements/4_small/febrian-zakaria-sjvU0THccQA-unsplash.jpg"
                             alt="photo Hôtel Bleu et Blanc Nuit ">
-                            <div>
+                            <div class="popularCardText">
                                 <div class="textCardRight">
                                     <h3>Hôtel Bleu et Blanc</h3>
                                     <p>Nuit à partir de 68<span class="BoldPrices">€</span></p>
@@ -252,7 +266,7 @@
                     </div>      
                 </div>
             </section>
-            <section>
+            <section class="activityBlock" id="activityBlock">
                 <a class="activitiesSectionTitle" href="#"><h2>Activités à Marseille</h2></a>
                 <div class="activitiesColumn">
                     <div class="columnCard activityCard">
