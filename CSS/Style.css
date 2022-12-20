@@ -9,6 +9,9 @@ body {
     margin: 0px;
     margin-left: 50px;
     margin-right: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }   
 
 .container {
@@ -87,7 +90,6 @@ header img {
 
 .menu ul li {
     border-top: 0px solid #0065FC;
-    border-width: 100%;
     padding-top: 46px;
     padding-right: 25px;
     padding-left: 25px;
@@ -409,9 +411,18 @@ header img {
 
 /*FOOTER*/
 
-.footer{
+footer {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.footer {
+    width: 100%;
+    max-width: 1400px;
     margin-top: 80px;
     display: flex;
+    
 }
 
 .footerLinks{
@@ -633,6 +644,7 @@ header img {
         border-top: white;
         border-bottom: 2px solid #0065FC;
         padding-bottom: 20px;
+        padding-top: 0px;
     }
 
     .title1, .bordureSearch, .filtre, .flexIcon {
