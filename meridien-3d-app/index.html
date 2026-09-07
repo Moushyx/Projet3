@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>Méridiens 3D</title>
+<meta name="description" content="Corps humain 3D interactif : méridiens de médecine traditionnelle chinoise, organes associés et points d'acupression." />
+
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#0d1526" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Méridiens 3D" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <h1>Corps &amp; Méridiens 3D</h1>
+      <div class="subtitle">Médecine Traditionnelle Chinoise · usage pédagogique</div>
+    </div>
+    <div id="search-wrap">
+      <input id="search-input" type="text" placeholder="Rechercher un point (ex: LI4)" autocomplete="off" />
+      <div id="search-results"></div>
+    </div>
+  </header>
+
+  <div id="viewer">
+    <canvas id="viewer-canvas"></canvas>
+    <div id="loading">Chargement de la scène 3D…</div>
+    <div class="viewer-controls">
+      <button id="btn-front" title="Vue de face">⭓</button>
+      <button id="btn-back" title="Vue de dos">⭔</button>
+      <button id="btn-reset" title="Réinitialiser">⟳</button>
+    </div>
+  </div>
+
+  <div id="legend">
+    <div id="legend-toolbar">
+      <button id="btn-all">Tout afficher</button>
+    </div>
+    <div id="legend-list"></div>
+  </div>
+
+  <div id="info-panel">
+    <div id="info-panel-header">
+      <div>
+        <h2 id="info-title">—</h2>
+        <p id="info-sub"></p>
+      </div>
+      <button id="info-close" aria-label="Fermer">✕</button>
+    </div>
+    <div id="info-body"></div>
+  </div>
+</div>
+
+<script src="js/vec3.js"></script>
+<script src="js/data.js"></script>
+<script src="js/geometry.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>

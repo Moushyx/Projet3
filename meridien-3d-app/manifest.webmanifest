@@ -1,0 +1,17 @@
+{
+  "name": "Corps & Méridiens 3D — MTC",
+  "short_name": "Méridiens 3D",
+  "description": "Corps humain 3D interactif : méridiens de médecine traditionnelle chinoise, organes associés et points d'acupression.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0d1526",
+  "theme_color": "#0d1526",
+  "lang": "fr",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

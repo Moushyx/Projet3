@@ -1,0 +1,385 @@
+(function () {
+  'use strict';
+
+  const canvas = document.getElementById('viewer-canvas');
+  const infoPanel = document.getElementById('info-panel');
+  const infoTitle = document.getElementById('info-title');
+  const infoSub = document.getElementById('info-sub');
+  const infoBody = document.getElementById('info-body');
+  const infoClose = document.getElementById('info-close');
+  const legendList = document.getElementById('legend-list');
+  const btnFront = document.getElementById('btn-front');
+  const btnBack = document.getElementById('btn-back');
+  const btnReset = document.getElementById('btn-reset');
+  const btnAll = document.getElementById('btn-all');
+  const searchInput = document.getElementById('search-input');
+  const searchResults = document.getElementById('search-results');
+  const loadingEl = document.getElementById('loading');
+
+  const engine = createEngine(canvas);
+
+  // ---- Géométrie statique du corps et des organes ----
+  const bodyParts = buildBodyGeometry();
+  const organParts = buildOrganGeometry(ORGAN_SHAPES);
+
+  // ---- Méridiens : segments de ligne + points d'acupression ----
+  const meridianSegments = []; // { a, b, color, meridianId }
+  const acupoints = []; // { pos, meridian, point, side, color, screen:{x,y,dist} }
+
+  function mirrorX(pos) { return [-pos[0], pos[1], pos[2]]; }
+
+  MERIDIANS.forEach((meridian) => {
+    const sides = meridian.bilateral ? ['R', 'L'] : ['C'];
+    sides.forEach((side) => {
+      const positions = meridian.points.map((p) => (side === 'L' ? mirrorX(p.pos) : p.pos));
+      for (let i = 0; i < positions.length - 1; i++) {
+        meridianSegments.push({ a: positions[i], b: positions[i + 1], color: meridian.color, meridianId: meridian.id });
+      }
+      meridian.points.forEach((point, idx) => {
+        acupoints.push({
+          pos: positions[idx],
+          meridian, point, side,
+          color: meridian.color,
+          screen: null,
+        });
+      });
+    });
+  });
+
+  // ---- État de sélection ----
+  let selectedMeridianId = null;
+  let selectedAcupoint = null;
+
+  function isMeridianActive(id) { return !selectedMeridianId || selectedMeridianId === id; }
+  function isOrganActive(key) {
+    if (!selectedMeridianId) return null; // null = état neutre
+    const m = MERIDIANS.find((mm) => mm.id === selectedMeridianId);
+    return m && m.organKey === key;
+  }
+
+  // ---- UI : légende des méridiens ----
+  function buildLegend() {
+    legendList.innerHTML = '';
+    MERIDIANS.forEach((m) => {
+      const chip = document.createElement('button');
+      chip.className = 'chip';
+      chip.style.setProperty('--chip-color', m.color);
+      chip.innerHTML = `<span class="dot" style="background:${m.color}"></span>${m.name}`;
+      chip.addEventListener('click', () => toggleMeridian(m.id));
+      legendList.appendChild(chip);
+    });
+  }
+  buildLegend();
+
+  function highlightChip(id) {
+    Array.from(legendList.children).forEach((chip, i) => {
+      chip.classList.toggle('active', MERIDIANS[i].id === id);
+    });
+  }
+
+  function toggleMeridian(id) {
+    if (selectedMeridianId === id) {
+      selectedMeridianId = null;
+      highlightChip(null);
+      hideInfoPanel();
+    } else {
+      selectedMeridianId = id;
+      selectedAcupoint = null;
+      highlightChip(id);
+      showMeridianInfo(MERIDIANS.find((m) => m.id === id));
+    }
+  }
+
+  function showMeridianInfo(meridian) {
+    infoPanel.classList.add('open');
+    infoTitle.textContent = `${meridian.name} (${meridian.namePinyin})`;
+    infoSub.textContent = `${meridian.yinYang} · Élément ${meridian.element} · Organe : ${meridian.organ}`;
+    infoBody.innerHTML = `
+      <p>${meridian.description}</p>
+      <p class="hint">Touchez un point lumineux sur le corps pour son détail, ou une autre carte pour changer de méridien.</p>
+      <div class="point-list">
+        ${meridian.points.map((p) => `<button class="point-chip" data-point="${p.id}">${p.id} · ${p.name}</button>`).join('')}
+      </div>
+    `;
+    infoBody.querySelectorAll('.point-chip').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const p = meridian.points.find((pt) => pt.id === btn.dataset.point);
+        showPointInfo(meridian, p, 'R');
+        focusOnPosition(p.pos);
+      });
+    });
+  }
+
+  function showPointInfo(meridian, point, side) {
+    selectedAcupoint = { meridian, point, side };
+    infoPanel.classList.add('open');
+    infoTitle.textContent = `${point.id} — ${point.name}`;
+    infoSub.textContent = `${point.trad} · Méridien du ${meridian.name} (${meridian.organ})`;
+    infoBody.innerHTML = `<p>${point.info}</p><p class="hint">Point situé côté ${side === 'L' ? 'gauche' : side === 'R' ? 'droit' : 'médian'}.</p>`;
+  }
+
+  function hideInfoPanel() {
+    infoPanel.classList.remove('open');
+    selectedAcupoint = null;
+  }
+
+  infoClose.addEventListener('click', () => {
+    hideInfoPanel();
+    selectedMeridianId = null;
+    highlightChip(null);
+  });
+
+  btnAll.addEventListener('click', () => {
+    selectedMeridianId = null;
+    highlightChip(null);
+    hideInfoPanel();
+  });
+
+  function focusOnPosition(pos) {
+    engine.camera.target = [0, pos[1], 0];
+  }
+
+  function setView(theta) {
+    engine.camera.theta = theta;
+    engine.camera.phi = 1.42;
+  }
+  btnFront.addEventListener('click', () => setView(0));
+  btnBack.addEventListener('click', () => setView(Math.PI));
+  btnReset.addEventListener('click', () => {
+    engine.camera.target = [0, 1.05, 0];
+    engine.camera.radius = 2.6;
+    engine.camera.theta = 0.25;
+    engine.camera.phi = 1.42;
+    selectedMeridianId = null;
+    highlightChip(null);
+    hideInfoPanel();
+  });
+
+  // ---- Recherche ----
+  const allPointsFlat = [];
+  MERIDIANS.forEach((m) => m.points.forEach((p) => allPointsFlat.push({ meridian: m, point: p })));
+
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    searchResults.innerHTML = '';
+    if (!q) { searchResults.classList.remove('open'); return; }
+    const matches = allPointsFlat.filter(({ point }) =>
+      point.id.toLowerCase().includes(q) || point.name.toLowerCase().includes(q) || point.trad.toLowerCase().includes(q)
+    ).slice(0, 12);
+    if (matches.length === 0) { searchResults.classList.remove('open'); return; }
+    searchResults.classList.add('open');
+    matches.forEach(({ meridian, point }) => {
+      const item = document.createElement('div');
+      item.className = 'search-item';
+      item.innerHTML = `<span class="dot" style="background:${meridian.color}"></span><b>${point.id}</b> ${point.name} <small>(${meridian.name})</small>`;
+      item.addEventListener('click', () => {
+        selectedMeridianId = meridian.id;
+        highlightChip(meridian.id);
+        showPointInfo(meridian, point, 'R');
+        focusOnPosition(point.pos);
+        searchResults.classList.remove('open');
+        searchInput.value = '';
+        searchInput.blur();
+      });
+      searchResults.appendChild(item);
+    });
+  });
+
+  // ---- Tap / clic : sélection d'un point d'acupression ----
+  let pointerDownInfo = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    pointerDownInfo = { x: e.clientX, y: e.clientY, t: Date.now() };
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (!pointerDownInfo) return;
+    const dx = e.clientX - pointerDownInfo.x;
+    const dy = e.clientY - pointerDownInfo.y;
+    const moved = Math.sqrt(dx * dx + dy * dy);
+    const dt = Date.now() - pointerDownInfo.t;
+    pointerDownInfo = null;
+    if (moved > 8 || dt > 500) return; // c'était un glissé, pas un tap
+
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const hitRadius = 20;
+    let best = null;
+    let bestDist = Infinity;
+    acupoints.forEach((ap) => {
+      if (!ap.screen) return;
+      const ddx = ap.screen.x - px;
+      const ddy = ap.screen.y - py;
+      const d2 = ddx * ddx + ddy * ddy;
+      if (d2 <= hitRadius * hitRadius && ap.screen.dist < bestDist) {
+        bestDist = ap.screen.dist;
+        best = ap;
+      }
+    });
+    if (best) {
+      selectedMeridianId = best.meridian.id;
+      highlightChip(best.meridian.id);
+      showPointInfo(best.meridian, best.point, best.side);
+    }
+  });
+
+  // ---- Boucle de rendu ----
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const colorCache = new Map();
+  function rgba(hex, alpha) {
+    let rgb = colorCache.get(hex);
+    if (!rgb) { rgb = hexToRgb(hex); colorCache.set(hex, rgb); }
+    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
+  }
+
+  function render() {
+    const ctx = engine.ctx;
+    const basis = engine.getBasis();
+    const w = engine.width, h = engine.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Fond dégradé
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#101c30');
+    grad.addColorStop(1, '#070c17');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    const drawList = [];
+
+    // Sol (cercle au niveau des pieds)
+    const groundPts = [];
+    const groundN = 40;
+    for (let i = 0; i < groundN; i++) {
+      const a = (i / groundN) * Math.PI * 2;
+      const p = engine.project([Math.cos(a) * 0.9, 0, Math.sin(a) * 0.9], basis);
+      if (p) groundPts.push(p);
+    }
+    if (groundPts.length === groundN) {
+      const avgDist = groundPts.reduce((s, p) => s + p.dist, 0) / groundN;
+      drawList.push({
+        dist: avgDist + 3,
+        draw: () => {
+          ctx.beginPath();
+          groundPts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(30,50,80,0.35)';
+          ctx.fill();
+        },
+      });
+    }
+
+    // Corps (chaîne de sphères légèrement gonflées + ombrage radial pour lisser les jointures)
+    bodyParts.forEach((part) => {
+      const p = engine.project(part.pos, basis);
+      if (!p) return;
+      const r = Math.max(0.6, part.radius * p.scale * 1.28);
+      drawList.push({
+        dist: p.dist,
+        draw: () => {
+          const lightX = p.x - r * 0.35, lightY = p.y - r * 0.4;
+          const grad = ctx.createRadialGradient(lightX, lightY, r * 0.1, p.x, p.y, r * 1.05);
+          grad.addColorStop(0, rgba('#f3ddc2', 0.95));
+          grad.addColorStop(0.6, rgba(part.color, 0.92));
+          grad.addColorStop(1, rgba('#c9a684', 0.85));
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
+        },
+      });
+    });
+
+    // Organes (discrets par défaut, mis en évidence quand leur méridien est sélectionné)
+    organParts.forEach((part) => {
+      const active = isOrganActive(part.organKey);
+      if (active === false) return; // masqué si un autre méridien est sélectionné
+      const p = engine.project(part.pos, basis);
+      if (!p) return;
+      const r = Math.max(0.5, part.radius * p.scale);
+      const alpha = active ? Math.min(part.alpha + 0.4, 0.9) : part.alpha * 0.15;
+      drawList.push({
+        dist: p.dist - 0.001, // légèrement devant la peau au même point
+        draw: () => {
+          if (active) { ctx.save(); ctx.shadowColor = part.color; ctx.shadowBlur = 14; }
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = rgba(part.color, alpha);
+          ctx.fill();
+          if (active) {
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = rgba(part.color, 0.9);
+            ctx.stroke();
+            ctx.restore();
+          }
+        },
+      });
+    });
+
+    // Segments de méridiens
+    meridianSegments.forEach((seg) => {
+      const isSelectedOne = selectedMeridianId === seg.meridianId;
+      const neutral = !selectedMeridianId;
+      const opacity = isSelectedOne ? 0.95 : neutral ? 0.4 : 0.06;
+      const width = isSelectedOne ? 2.6 : neutral ? 1.3 : 1;
+      const pa = engine.project(seg.a, basis);
+      const pb = engine.project(seg.b, basis);
+      if (!pa || !pb) return;
+      const dist = (pa.dist + pb.dist) / 2;
+      drawList.push({
+        dist,
+        draw: () => {
+          ctx.beginPath();
+          ctx.moveTo(pa.x, pa.y);
+          ctx.lineTo(pb.x, pb.y);
+          ctx.strokeStyle = rgba(seg.color, opacity);
+          ctx.lineWidth = width;
+          ctx.stroke();
+        },
+      });
+    });
+
+    // Points d'acupression
+    const t = performance.now() * 0.002;
+    acupoints.forEach((ap) => {
+      const p = engine.project(ap.pos, basis);
+      ap.screen = p;
+      if (!p) return;
+      const active = isMeridianActive(ap.meridian.id);
+      const isSelected = selectedAcupoint && selectedAcupoint.point.id === ap.point.id && selectedAcupoint.side === ap.side;
+      const baseR = Math.max(active ? 4.5 : 1.8, 0.012 * p.scale * (active ? 1 : 0.5));
+      const pulse = active ? (0.5 + Math.sin(t * 2.2 + ap.pos[1] * 5) * 0.15) : 0;
+      const opacity = active ? Math.min(1, 0.5 + pulse) : 0.22;
+      drawList.push({
+        dist: p.dist - 0.002,
+        draw: () => {
+          if (active) {
+            ctx.save();
+            ctx.shadowColor = ap.color;
+            ctx.shadowBlur = isSelected ? 16 : 8;
+          }
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, isSelected ? baseR * 1.6 : baseR, 0, Math.PI * 2);
+          ctx.fillStyle = rgba(ap.color, opacity);
+          ctx.fill();
+          if (isSelected) {
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+          }
+          if (active) ctx.restore();
+        },
+      });
+    });
+
+    drawList.sort((a, b) => b.dist - a.dist);
+    drawList.forEach((item) => item.draw());
+
+    requestAnimationFrame(render);
+  }
+
+  if (loadingEl) loadingEl.remove();
+  requestAnimationFrame(render);
+})();
