@@ -184,7 +184,8 @@ function toPNG(r, plate) {
   // d'un degré et le nez, la bouche et les paupières disparaissaient du croquis.
   // On compare donc les orientations à deux millimètres de distance.
   const pas = Math.max(1, Math.min(4, Math.round(r.frame.scale * 0.0008)));
-  const px = new Uint8Array(w * h * 3).fill(255);
+  const px = new Uint8Array(w * h * 3);
+  for (let i = 0; i < w * h; i++) { px[i*3] = 252; px[i*3+1] = 251; px[i*3+2] = 247; }
 
   const dAt = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? Infinity : depth[y * w + x];
   const inAt = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : inside[y * w + x];
@@ -194,9 +195,10 @@ function toPNG(r, plate) {
       const o = y * w + x;
       if (!inside[o]) continue;
 
-      // Fond du corps : un gris à peine posé, juste pour détacher la silhouette
-      // du papier. Le bord qui se dérobe au regard est un peu plus dense.
-      let v = facing[o] < 0.30 ? 232 : 246;
+      // Papier légèrement chaud, corps à peine plus dense : la planche doit se
+      // lire comme un dessin, pas comme un rendu.
+      let v = facing[o] < 0.30 ? 234 : 243;
+      let teinte = 1;
 
       // Contour : rupture de profondeur, ou bord de la silhouette.
       const d = depth[o];
@@ -223,12 +225,14 @@ function toPNG(r, plate) {
           const dot = nx[o]*nx[q] + ny[o]*ny[q] + nz[o]*nz[q];
           if (dot < pire) pire = dot;
         }
-        if (pire < 0.88) trait = true; // une trentaine de degrés de cassure
+        if (pire < 0.88) { trait = true; teinte = 2; } // une trentaine de degrés
       }
-      if (trait) v = 30;
+      // Hiérarchie du trait : le contour est net, le relief intérieur discret.
+      // Un trait uniforme donnait un fouillis de rayures d'égale importance.
+      if (trait) v = teinte === 2 ? 152 : 38;
 
       const k = o * 3;
-      px[k] = v; px[k+1] = v; px[k+2] = v;
+      px[k] = v; px[k+1] = Math.round(v * 0.995); px[k+2] = Math.round(v * 0.975);
     }
   }
 
@@ -527,7 +531,31 @@ function tracerTrajets(pl, r) {
       });
       if (courant.length >= 4) sorties.push(courant);
     });
-    if (sorties.length) parPlanche[mid] = sorties;
+    // Lissage : le trajet suit la peau point par point, tous les deux
+    // centimètres, et le plaquage le fait vibrer. Deux passes de moyenne
+    // glissante lui rendent le geste d'un trait tracé.
+    const lisser = (pl) => {
+      const n = pl.length / 2;
+      if (n < 4) return pl;
+      let a = pl.slice();
+      for (let pass = 0; pass < 2; pass++) {
+        const b = a.slice();
+        for (let i = 1; i < n - 1; i++) {
+          b[i*2] = (a[(i-1)*2] + 2 * a[i*2] + a[(i+1)*2]) / 4;
+          b[i*2+1] = (a[(i-1)*2+1] + 2 * a[i*2+1] + a[(i+1)*2+1]) / 4;
+        }
+        a = b;
+      }
+      // Décimation : on garde un point tous les six pixels, le trait ne perd
+      // rien et le fichier maigrit.
+      const out = [a[0], a[1]];
+      for (let i = 1; i < n; i++) {
+        const dx = a[i*2] - out[out.length-2], dy = a[i*2+1] - out[out.length-1];
+        if (i === n - 1 || dx*dx + dy*dy > 36) out.push(Math.round(a[i*2]*10)/10, Math.round(a[i*2+1]*10)/10);
+      }
+      return out;
+    };
+    if (sorties.length) parPlanche[mid] = sorties.map(lisser);
   });
   platePaths[pl.id] = parPlanche;
 }

@@ -270,7 +270,7 @@ header {
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
-  background: #f4f2ee;
+  background: #fcfbf7;
 }
 .zone-head {
   display: flex; align-items: center; gap: 10px;
@@ -295,7 +295,7 @@ header {
   position: relative;
   height: 340px;
   overflow: hidden;
-  background: #f4f2ee;
+  background: #fcfbf7;
   touch-action: none;
   cursor: grab;
 }
@@ -312,24 +312,24 @@ header {
 .zone-svg .cote-pt { fill: #b4453c; }
 .zone-svg .cote-txt {
   font-family: var(--font-mono); font-size: 11px; font-weight: 600;
-  fill: #a13b33; paint-order: stroke; stroke: rgba(244,242,238,0.9); stroke-width: 3px;
+  fill: #a13b33; paint-order: stroke; stroke: rgba(252,251,247,0.92); stroke-width: 3px;
 }
 .zone-svg .cote-src {
   font-family: var(--font-body); font-size: 9.5px;
-  fill: #6b7280; paint-order: stroke; stroke: rgba(244,242,238,0.9); stroke-width: 3px;
+  fill: #6b7280; paint-order: stroke; stroke: rgba(252,251,247,0.92); stroke-width: 3px;
 }
 
 /* Points : les voisins en gris, le point choisi en rouge. */
-.zone-svg .pt { fill: #8b93a1; stroke: #f4f2ee; stroke-width: 1.5; }
+.zone-svg .pt { fill: #7c8494; stroke: #fcfbf7; stroke-width: 1.6; }
 .zone-svg .pt-txt {
   font-family: var(--font-mono); font-size: 10px; fill: #4b5563;
-  paint-order: stroke; stroke: rgba(244,242,238,0.85); stroke-width: 3px;
+  paint-order: stroke; stroke: rgba(252,251,247,0.9); stroke-width: 3px;
 }
-.zone-svg .pt-actif { fill: #d92d20; stroke: #f4f2ee; stroke-width: 2; }
+.zone-svg .pt-actif { fill: #d92d20; stroke: #fcfbf7; stroke-width: 2; }
 .zone-svg .pt-actif-halo { fill: rgba(217,45,32,0.16); }
 .zone-svg .pt-actif-txt {
   font-family: var(--font-mono); font-size: 13px; font-weight: 700; fill: #b42318;
-  paint-order: stroke; stroke: rgba(244,242,238,0.92); stroke-width: 4px;
+  paint-order: stroke; stroke: rgba(252,251,247,0.94); stroke-width: 4px;
 }
 
 .zone-pied {
@@ -469,5 +469,13 @@ body.planche-plein #info-panel { transform: none; }
 
 /* Trajets des canaux sur la planche : le canal traité en couleur, les autres
    en gris très clair, comme les lignes de fond d'une planche d'atlas. */
-.zone-svg .canal { fill: none; stroke: #d3d7dd; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.zone-svg .canal.actif { stroke-width: 3.5; opacity: 0.75; }
+.zone-svg .canal { fill: none; stroke: #dcdfe4; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.zone-svg .canal.actif { stroke-width: 4; opacity: 0.8; }
+
+/* Un seul bouton nommé, plutôt que quatre symboles : la vue s'ouvre au bon
+   cadrage, le reste se fait au doigt. */
+.zone-btn.large {
+  width: auto; padding: 0 10px;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em;
+  text-transform: uppercase; white-space: nowrap;
+}

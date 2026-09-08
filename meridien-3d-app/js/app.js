@@ -108,11 +108,9 @@
     return `
       <div class="zone" data-zone='${JSON.stringify(data).replace(/'/g, '&#39;')}'>
         <div class="zone-head">
-          <span class="zone-nom">${plate.nom}${side === 'L' ? ' · côté gauche' : ''}</span>
+          <span class="zone-nom">${plate.nom}${side === 'L' ? ' · gauche' : ''}</span>
           <span class="zone-zoom">
-            <button class="zone-btn" data-zoom="out" type="button" aria-label="Réduire">–</button>
-            <button class="zone-btn" data-zoom="in" type="button" aria-label="Agrandir">+</button>
-            <button class="zone-btn" data-zoom="fit" type="button" aria-label="Voir la planche entière">⤢</button>
+            <button class="zone-btn large" data-zoom="fit" type="button">Vue d'ensemble</button>
             <button class="zone-btn" data-zoom="plein" type="button" aria-label="Plein écran">⛶</button>
           </span>
         </div>
@@ -137,16 +135,42 @@
     return { k, tx: (vw - d.w * k) / 2, ty: (vh - d.h * k) / 2 };
   }
 
-  // Cadrage d'ouverture : une fenêtre de vingt-cinq centimètres de corps,
-  // centrée sur le point — assez large pour reconnaître la région, assez
-  // serrée pour lire. Si la planche entière tient dans moins que cela, on la
-  // montre entière.
-  const FENETRE_M = 0.25;
+  // Cadrage d'ouverture : exactement ce qu'il y a à montrer — le point, sa
+  // mesure, et les voisins qui l'entourent de près. Rien à régler, rien à
+  // recadrer : la vue s'ouvre sur la bonne chose.
+  //
+  // Une fenêtre de taille fixe, comme on faisait, tombait juste ou à côté
+  // selon la région : sur un poignet elle cadrait le vide, sur un dos elle
+  // coupait la mesure.
   function zoneDepart(d, vw, vh) {
-    const fit = zoneFit(d, vw, vh);
-    const k = Math.max(fit.k, vh / (FENETRE_M * d.pxm));
-    if (k <= fit.k * 1.001) return fit;
-    return { k, tx: vw / 2 - (d.miroir ? d.w - d.cx : d.cx) * k, ty: vh / 2 - d.cy * k };
+    let x0 = d.cx, y0 = d.cy, x1 = d.cx, y1 = d.cy;
+    const tenir = (x, y) => {
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    };
+    d.cotes.forEach((c) => { tenir(c.ax, c.ay); if (c.bx !== undefined) tenir(c.bx, c.by); });
+    const rayon = 0.085 * d.pxm;
+    let seul = !d.cotes.length;
+    d.points.forEach((p) => {
+      if (p.id !== d.actif && Math.hypot(p.x - d.cx, p.y - d.cy) < rayon) { tenir(p.x, p.y); seul = false; }
+    });
+    // Un point seul sur sa planche — KI1 sous la plante — n'a rien à cadrer
+    // autour de lui : on montre la région entière, qui, elle, se reconnaît.
+    if (seul) return zoneFit(d, vw, vh);
+    const marge = 0.035 * d.pxm;
+    x0 -= marge; y0 -= marge; x1 += marge; y1 += marge;
+
+    let k = Math.min(vw / (x1 - x0), vh / (y1 - y0));
+    // Ni loupe ni vue satellite : entre douze et quarante centimètres de corps
+    // dans la hauteur du cadre.
+    // Plancher de contexte : jamais moins de dix-huit centimètres de corps dans
+    // la hauteur du cadre, ni moins de la moitié d'une planche déjà petite.
+    const hauteurPlanche = d.h / d.pxm;
+    const mini = Math.min(0.18, hauteurPlanche * 0.5);
+    k = Math.min(k, vh / (mini * d.pxm));
+    k = Math.max(k, vh / (0.40 * d.pxm), zoneFit(d, vw, vh).k);
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    return { k, tx: vw / 2 - (d.miroir ? d.w - mx : mx) * k, ty: vh / 2 - my * k };
   }
 
   function layoutZone(root) {
@@ -171,11 +195,14 @@
       st.vw = vw; st.vh = vh;
       zoneEtat.set(el, st);
     }
-    // Bornes : la planche reste dans le cadre. Quand elle y tient tout entière,
-    // elle est centrée ; sinon on l'empêche seulement de sortir.
-    const cw = d.w * st.k, ch = d.h * st.k;
-    st.tx = cw <= vw ? (vw - cw) / 2 : Math.min(0, Math.max(vw - cw, st.tx));
-    st.ty = ch <= vh ? (vh - ch) / 2 : Math.min(0, Math.max(vh - ch, st.ty));
+    // Bornes : elles ne s'appliquent qu'après une manipulation. Sur le cadrage
+    // d'ouverture, elles décalaient la vue quand le point était près d'un bord
+    // de la planche — le point cessait d'être au centre.
+    if (st.manuel) {
+      const cw = d.w * st.k, ch = d.h * st.k;
+      st.tx = cw <= vw ? (vw - cw) / 2 : Math.min(0, Math.max(vw - cw, st.tx));
+      st.ty = ch <= vh ? (vh - ch) / 2 : Math.min(0, Math.max(vh - ch, st.ty));
+    }
 
     const X = (x) => st.tx + (d.miroir ? d.w - x : x) * st.k;
     const Y = (y) => st.ty + y * st.k;
@@ -304,6 +331,10 @@
       const limg = loc.querySelector('.zone-loc-img');
       limg.style.width = lw + 'px';
       limg.style.height = lh + 'px';
+      // La miniature suit le côté montré : sans cela, le point et le cadre,
+      // eux calculés en miroir, tombaient à côté du dessin.
+      limg.style.transformOrigin = '50% 50%';
+      limg.style.transform = d.miroir ? 'scaleX(-1)' : 'none';
       const lx = (x) => (d.miroir ? d.w - x : x) * kl;
       const pt = loc.querySelector('.zone-loc-pt');
       pt.style.left = lx(d.cx) + 'px';
@@ -312,8 +343,9 @@
       const cadre = loc.querySelector('.zone-loc-cadre');
       const vx0 = -st.tx / st.k, vy0 = -st.ty / st.k;
       const vw0 = vw / st.k, vh0 = vh / st.k;
-      const rx = d.miroir ? d.w - (vx0 + vw0) : vx0;
-      cadre.style.left = Math.max(0, rx * kl) + 'px';
+      // vx0 est déjà exprimé dans le repère montré : le remiroiter décalait le
+      // rectangle à l'opposé du point.
+      cadre.style.left = Math.max(0, vx0 * kl) + 'px';
       cadre.style.top = Math.max(0, vy0 * kl) + 'px';
       cadre.style.width = Math.min(lw, vw0 * kl) + 'px';
       cadre.style.height = Math.min(lh, vh0 * kl) + 'px';
@@ -334,6 +366,7 @@
       const vw = view.clientWidth, vh = view.clientHeight;
       const px = cx === undefined ? vw / 2 : cx;
       const py = cy === undefined ? vh / 2 : cy;
+      st.manuel = true;
       const k2 = Math.max(st.base * 0.9, Math.min(st.base * 4, st.k * fact));
       // On agrandit autour du doigt : le pixel visé ne bouge pas.
       st.tx = px - (px - st.tx) * (k2 / st.k);
@@ -357,8 +390,14 @@
           return;
         }
         if (mode === 'fit') {
-          const f = zoneFit(d, view.clientWidth, view.clientHeight);
-          zoneEtat.set(el, Object.assign(f, { base: f.k }));
+          // Bascule entre la vue d'ensemble et le cadrage du point.
+          const w2 = view.clientWidth, h2 = view.clientHeight;
+          const st = zoneEtat.get(el);
+          const ens = st && st.ensemble;
+          const f = ens ? zoneDepart(d, w2, h2) : zoneFit(d, w2, h2);
+          zoneEtat.set(el, Object.assign(f, { base: zoneFit(d, w2, h2).k, vw: w2, vh: h2,
+            manuel: !ens, ensemble: !ens }));
+          b.textContent = ens ? "Vue d'ensemble" : 'Revenir au point';
           layoutZone(root);
         } else zoomer(mode === 'in' ? 1.5 : 1 / 1.5);
       });
@@ -383,12 +422,13 @@
       const now = Array.from(e.touches).map((t) => ({ id: t.identifier, x: t.clientX - r.left, y: t.clientY - r.top }));
       if (now.length === 1) {
         const p = pts.get(now[0].id);
-        if (p) { st.tx += now[0].x - p.x; st.ty += now[0].y - p.y; layoutZone(root); }
+        if (p) { st.manuel = true; st.tx += now[0].x - p.x; st.ty += now[0].y - p.y; layoutZone(root); }
       } else if (now.length >= 2) {
         const dist = Math.hypot(now[0].x - now[1].x, now[0].y - now[1].y);
         const cx = (now[0].x + now[1].x) / 2, cy = (now[0].y + now[1].y) / 2;
         if (lastD) {
           const st2 = zoneEtat.get(el);
+          st2.manuel = true;
           const k2 = Math.max(st2.base * 0.9, Math.min(st2.base * 4, st2.k * (dist / lastD)));
           st2.tx = cx - (cx - st2.tx) * (k2 / st2.k) + (lastC ? cx - lastC.x : 0);
           st2.ty = cy - (cy - st2.ty) * (k2 / st2.k) + (lastC ? cy - lastC.y : 0);
@@ -408,6 +448,7 @@
     window.addEventListener('mousemove', (e) => {
       if (!drag) return;
       const st = zoneEtat.get(el);
+      st.manuel = true;
       st.tx += e.clientX - drag.x; st.ty += e.clientY - drag.y;
       drag = { x: e.clientX, y: e.clientY };
       layoutZone(root);

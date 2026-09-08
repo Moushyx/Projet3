@@ -868,7 +868,10 @@ MERIDIANS.forEach((m) => m.points.forEach((pt) => {
   } else if (r.zone === 'cou') {
     bouts.push('sur le cou');
   }
-  if (bouts.length) locs[pt.id] = bouts.join(', ') + '.';
+  if (bouts.length) {
+    const t = bouts.join(', ') + '.';
+    locs[pt.id] = t.charAt(0).toUpperCase() + t.slice(1);
+  }
 }));
 
 const out = `// Positions des points d'acupression et trajets des méridiens.
