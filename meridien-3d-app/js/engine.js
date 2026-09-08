@@ -19,12 +19,16 @@ function createEngine(canvas) {
 
   const camera = {
     target: [0, 1.05, 0],
-    radius: 2.6,
+    radius: 3.0,
     theta: 0.25, // azimut (rad)
     phi: 1.42,   // élévation depuis l'axe Y (rad), ~PI/2 = niveau des yeux
     fov: 40 * Math.PI / 180,
     minRadius: 0.55,
-    maxRadius: 5.0,
+    maxRadius: 5.5,
+    // Surface masquée par la fiche de détail (en pixels). La scène est cadrée
+    // dans la zone réellement visible, jamais sous le panneau.
+    occludedBottom: 0,
+    occludedRight: 0,
   };
 
   function clampPhi(p) { return Math.max(0.12, Math.min(Math.PI - 0.12, p)); }
@@ -57,11 +61,14 @@ function createEngine(canvas) {
     const camZ = V3.dot(rel, basis.z);
     const dist = -camZ;
     if (dist <= 0.02) return null;
-    const f = (height / 2) / Math.tan(camera.fov / 2);
+    // Cadrage sur la zone visible (ce que la fiche ne recouvre pas)
+    const usableH = Math.max(160, height - camera.occludedBottom);
+    const usableW = Math.max(160, width - camera.occludedRight);
+    const f = (usableH / 2) / Math.tan(camera.fov / 2);
     const scale = f / dist;
     return {
-      x: width / 2 + camX * scale,
-      y: height / 2 - camY * scale,
+      x: usableW / 2 + camX * scale,
+      y: usableH / 2 - camY * scale,
       dist,
       scale,
     };

@@ -15,6 +15,29 @@
   const searchInput = document.getElementById('search-input');
   const searchResults = document.getElementById('search-results');
   const loadingEl = document.getElementById('loading');
+  const hintEl = document.getElementById('hint');
+
+  const DISCLAIMER = "Positions indicatives et simplifiées, à but pédagogique. Ne remplace pas un avis médical ni la formation d'un praticien.";
+
+  function setAccent(color) {
+    document.documentElement.style.setProperty('--accent', color || '#d9c3a5');
+  }
+
+  // La fiche de détail recouvre le bas de l'écran (ou la droite sur grand écran).
+  // On recadre la scène sur la surface qui reste visible.
+  let occludedTarget = { bottom: 0, right: 0 };
+  function updateSceneShift(panelOpen) {
+    if (!panelOpen) { occludedTarget = { bottom: 0, right: 0 }; return; }
+    const isSidePanel = window.innerWidth >= 760;
+    if (isSidePanel) {
+      occludedTarget = { bottom: 0, right: Math.min(infoPanel.offsetWidth, engine.width * 0.5) };
+    } else {
+      occludedTarget = { bottom: Math.min(infoPanel.offsetHeight, engine.height * 0.62), right: 0 };
+    }
+  }
+  function dismissHint() {
+    if (hintEl) hintEl.classList.add('hidden');
+  }
 
   const engine = createEngine(canvas);
 
@@ -64,7 +87,7 @@
       const chip = document.createElement('button');
       chip.className = 'chip';
       chip.style.setProperty('--chip-color', m.color);
-      chip.innerHTML = `<span class="dot" style="background:${m.color}"></span>${m.name}`;
+      chip.innerHTML = `<span class="dot" style="background:${m.color}"></span><span class="code">${m.id}</span>${m.name}`;
       chip.addEventListener('click', () => toggleMeridian(m.id));
       legendList.appendChild(chip);
     });
@@ -78,9 +101,11 @@
   }
 
   function toggleMeridian(id) {
+    dismissHint();
     if (selectedMeridianId === id) {
       selectedMeridianId = null;
       highlightChip(null);
+      setAccent(null);
       hideInfoPanel();
     } else {
       selectedMeridianId = id;
@@ -91,15 +116,22 @@
   }
 
   function showMeridianInfo(meridian) {
+    setAccent(meridian.color);
     infoPanel.classList.add('open');
-    infoTitle.textContent = `${meridian.name} (${meridian.namePinyin})`;
-    infoSub.textContent = `${meridian.yinYang} · Élément ${meridian.element} · Organe : ${meridian.organ}`;
+    infoTitle.innerHTML = `<span class="code">${meridian.id}</span>${meridian.name}`;
+    infoSub.textContent = `${meridian.namePinyin} · ${meridian.yinYang}`;
     infoBody.innerHTML = `
-      <p>${meridian.description}</p>
-      <p class="hint">Touchez un point lumineux sur le corps pour son détail, ou une autre carte pour changer de méridien.</p>
-      <div class="point-list">
-        ${meridian.points.map((p) => `<button class="point-chip" data-point="${p.id}">${p.id} · ${p.name}</button>`).join('')}
+      <div class="meta-row">
+        <span class="meta"><span class="k">Élément</span><span class="v">${meridian.element}</span></span>
+        <span class="meta"><span class="k">Organe</span><span class="v">${meridian.organ}</span></span>
+        <span class="meta"><span class="k">Points</span><span class="v">${meridian.points.length}</span></span>
       </div>
+      <p>${meridian.description}</p>
+      <div class="section-label">Points du canal</div>
+      <div class="point-list">
+        ${meridian.points.map((p) => `<button class="point-chip" data-point="${p.id}"><span class="code">${p.id}</span>${p.name}</button>`).join('')}
+      </div>
+      <p class="disclaimer">${DISCLAIMER}</p>
     `;
     infoBody.querySelectorAll('.point-chip').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -108,30 +140,58 @@
         focusOnPosition(p.pos);
       });
     });
+    requestAnimationFrame(() => updateSceneShift(true));
   }
 
   function showPointInfo(meridian, point, side) {
+    dismissHint();
+    setAccent(meridian.color);
     selectedAcupoint = { meridian, point, side };
     infoPanel.classList.add('open');
-    infoTitle.textContent = `${point.id} — ${point.name}`;
-    infoSub.textContent = `${point.trad} · Méridien du ${meridian.name} (${meridian.organ})`;
-    infoBody.innerHTML = `<p>${point.info}</p><p class="hint">Point situé côté ${side === 'L' ? 'gauche' : side === 'R' ? 'droit' : 'médian'}.</p>`;
+    infoTitle.innerHTML = `<span class="code">${point.id}</span>${point.name}`;
+    infoSub.textContent = `« ${point.trad} »`;
+    const sideLabel = side === 'L' ? 'Côté gauche' : side === 'R' ? 'Côté droit' : 'Ligne médiane';
+    infoBody.innerHTML = `
+      <div class="meta-row">
+        <span class="meta"><span class="k">Canal</span><span class="v">${meridian.name}</span></span>
+        <span class="meta"><span class="k">Organe</span><span class="v">${meridian.organ}</span></span>
+        <span class="meta"><span class="k">Côté</span><span class="v">${sideLabel}</span></span>
+      </div>
+      <div class="section-label">Indications principales</div>
+      <p>${point.info}</p>
+      <div class="section-label">Autres points du canal ${meridian.id}</div>
+      <div class="point-list">
+        ${meridian.points.filter((p) => p.id !== point.id).map((p) => `<button class="point-chip" data-point="${p.id}"><span class="code">${p.id}</span>${p.name}</button>`).join('')}
+      </div>
+      <p class="disclaimer">${DISCLAIMER}</p>
+    `;
+    infoBody.querySelectorAll('.point-chip').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const p = meridian.points.find((pt) => pt.id === btn.dataset.point);
+        showPointInfo(meridian, p, side);
+        focusOnPosition(p.pos);
+      });
+    });
+    requestAnimationFrame(() => updateSceneShift(true));
   }
 
   function hideInfoPanel() {
     infoPanel.classList.remove('open');
     selectedAcupoint = null;
+    updateSceneShift(false);
   }
 
   infoClose.addEventListener('click', () => {
     hideInfoPanel();
     selectedMeridianId = null;
     highlightChip(null);
+    setAccent(null);
   });
 
   btnAll.addEventListener('click', () => {
     selectedMeridianId = null;
     highlightChip(null);
+    setAccent(null);
     hideInfoPanel();
   });
 
@@ -152,6 +212,7 @@
     engine.camera.phi = 1.42;
     selectedMeridianId = null;
     highlightChip(null);
+    setAccent(null);
     hideInfoPanel();
   });
 
@@ -171,7 +232,7 @@
     matches.forEach(({ meridian, point }) => {
       const item = document.createElement('div');
       item.className = 'search-item';
-      item.innerHTML = `<span class="dot" style="background:${meridian.color}"></span><b>${point.id}</b> ${point.name} <small>(${meridian.name})</small>`;
+      item.innerHTML = `<span class="dot" style="background:${meridian.color}"></span><span class="code">${point.id}</span> ${point.name} <small>${meridian.name}</small>`;
       item.addEventListener('click', () => {
         selectedMeridianId = meridian.id;
         highlightChip(meridian.id);
@@ -219,6 +280,8 @@
       selectedMeridianId = best.meridian.id;
       highlightChip(best.meridian.id);
       showPointInfo(best.meridian, best.point, best.side);
+    } else {
+      dismissHint();
     }
   });
 
@@ -236,6 +299,8 @@
 
   function render() {
     const ctx = engine.ctx;
+    engine.camera.occludedBottom += (occludedTarget.bottom - engine.camera.occludedBottom) * 0.16;
+    engine.camera.occludedRight += (occludedTarget.right - engine.camera.occludedRight) * 0.16;
     const basis = engine.getBasis();
     const w = engine.width, h = engine.height;
     ctx.clearRect(0, 0, w, h);
@@ -379,6 +444,8 @@
 
     requestAnimationFrame(render);
   }
+
+  window.addEventListener('resize', () => updateSceneShift(infoPanel.classList.contains('open')));
 
   if (loadingEl) loadingEl.remove();
   requestAnimationFrame(render);

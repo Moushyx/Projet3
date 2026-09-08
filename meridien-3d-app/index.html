@@ -7,24 +7,27 @@
 <meta name="description" content="Corps humain 3D interactif : méridiens de médecine traditionnelle chinoise, organes associés et points d'acupression." />
 
 <link rel="manifest" href="manifest.webmanifest" />
-<meta name="theme-color" content="#0d1526" />
+<meta name="theme-color" content="#0b1220" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Méridiens 3D" />
 <link rel="apple-touch-icon" href="icons/icon-180.png" />
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
 
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500;600&family=Instrument+Sans:wght@400;500;600&display=swap" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 <div id="app">
   <header>
-    <div>
-      <h1>Corps &amp; Méridiens 3D</h1>
-      <div class="subtitle">Médecine Traditionnelle Chinoise · usage pédagogique</div>
+    <div class="wordmark">
+      <h1>Méridiens 3D</h1>
+      <span class="tag">MTC · 14 canaux</span>
     </div>
     <div id="search-wrap">
-      <input id="search-input" type="text" placeholder="Rechercher un point (ex: LI4)" autocomplete="off" />
+      <input id="search-input" type="text" placeholder="Point : LI4, Hegu…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Rechercher un point d'acupression" />
       <div id="search-results"></div>
     </div>
   </header>
@@ -33,9 +36,12 @@
     <canvas id="viewer-canvas"></canvas>
     <div id="loading">Chargement de la scène 3D…</div>
     <div class="viewer-controls">
-      <button id="btn-front" title="Vue de face">⭓</button>
-      <button id="btn-back" title="Vue de dos">⭔</button>
-      <button id="btn-reset" title="Réinitialiser">⟳</button>
+      <button id="btn-front" aria-label="Vue de face">Face</button>
+      <button id="btn-back" aria-label="Vue de dos">Dos</button>
+      <button id="btn-reset" aria-label="Réinitialiser la vue">↺</button>
+    </div>
+    <div id="hint">
+      Faites pivoter le corps du doigt. <b>Touchez un point</b> ou choisissez un canal ci-dessous.
     </div>
   </div>
 
@@ -46,7 +52,7 @@
     <div id="legend-list"></div>
   </div>
 
-  <div id="info-panel">
+  <div id="info-panel" role="dialog" aria-label="Détail">
     <div id="info-panel-header">
       <div>
         <h2 id="info-title">—</h2>

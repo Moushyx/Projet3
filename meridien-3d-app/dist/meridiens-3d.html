@@ -1,0 +1,1324 @@
+<title>Méridiens 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500;600&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Corps & Méridiens 3D — feuille de style
+   Univers visuel unique et assumé : planche anatomique nocturne.
+   Toutes les couleurs sont peintes explicitement (pas de thème clair). */
+
+:root {
+  --ink: #0b1220;
+  --ink-2: #101b2e;
+  --ink-3: #17253c;
+  --line: #24354f;
+  --text: #edf2f9;
+  --muted: #8fa1bd;
+  --skin: #e8c9a8;
+  --accent: #d9c3a5; /* prend la couleur du canal sélectionné */
+
+  --font-display: 'Bricolage Grotesque', 'Trebuchet MS', system-ui, sans-serif;
+  --font-body: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%; width: 100%;
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+button { font-family: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#app {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ---------- Barre supérieure ---------- */
+header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 14px;
+  background: var(--ink);
+  border-bottom: 1px solid var(--line);
+  z-index: 5;
+}
+.wordmark { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.wordmark h1 {
+  font-family: var(--font-display);
+  font-size: 17px; font-weight: 700; letter-spacing: -0.01em;
+  margin: 0; white-space: nowrap;
+}
+.wordmark .tag {
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 500; letter-spacing: 0.14em;
+  color: var(--muted); text-transform: uppercase; white-space: nowrap;
+}
+/* Sur écran étroit l'étiquette céderait la place au champ de recherche */
+@media (max-width: 460px) { .wordmark .tag { display: none; } }
+
+#search-wrap { position: relative; margin-left: auto; width: 44%; max-width: 190px; }
+#search-input {
+  width: 100%; padding: 7px 11px;
+  border-radius: 8px; border: 1px solid var(--line);
+  background: var(--ink-2); color: var(--text);
+  font-family: var(--font-mono); font-size: 12px;
+  outline: none;
+}
+#search-input::placeholder { color: #6c7f9c; font-family: var(--font-body); }
+#search-input:focus { border-color: var(--accent); }
+
+#search-results {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  background: var(--ink-2); border: 1px solid var(--line); border-radius: 10px;
+  max-height: 280px; overflow-y: auto; display: none; z-index: 20;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+}
+#search-results.open { display: block; }
+.search-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 11px; font-size: 13px;
+  border-bottom: 1px solid var(--ink-3);
+}
+.search-item:last-child { border-bottom: none; }
+.search-item:active { background: var(--ink-3); }
+.search-item .code { font-family: var(--font-mono); font-weight: 600; font-size: 12px; }
+.search-item small { color: var(--muted); margin-left: auto; font-size: 11px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+
+/* ---------- Scène 3D ---------- */
+#viewer { flex: 1; position: relative; touch-action: none; }
+#viewer-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+#loading {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 13px; background: var(--ink); z-index: 10;
+}
+
+.viewer-controls {
+  position: absolute; right: 10px; bottom: 104px;
+  display: flex; flex-direction: column; gap: 6px; z-index: 6;
+}
+.viewer-controls button {
+  min-width: 46px; padding: 7px 9px;
+  border-radius: 8px; border: 1px solid var(--line);
+  background: rgba(16,27,46,0.9); color: var(--text);
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  backdrop-filter: blur(6px);
+}
+.viewer-controls button:active { background: var(--ink-3); border-color: var(--accent); }
+
+/* Indice affiché tant qu'aucun canal n'est choisi */
+#hint {
+  position: absolute; left: 12px; right: 74px;
+  bottom: 104px; z-index: 5;
+  text-align: center;
+  padding: 7px 13px; border-radius: 999px;
+  background: rgba(16,27,46,0.88); border: 1px solid var(--line);
+  color: var(--muted); font-size: 11.5px; line-height: 1.35;
+  backdrop-filter: blur(6px);
+  transition: opacity 0.3s ease;
+}
+#hint.hidden { opacity: 0; pointer-events: none; }
+#hint b { color: var(--text); font-weight: 500; }
+
+/* ---------- Rail des 14 canaux ---------- */
+#legend {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+  padding: 10px 0 12px;
+  background: linear-gradient(0deg, var(--ink) 62%, rgba(11,18,32,0));
+  pointer-events: none;
+}
+#legend button { pointer-events: auto; }
+#legend-toolbar { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+#legend-toolbar button {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--ink-2); color: var(--muted);
+}
+#legend-toolbar button:active { color: var(--text); border-color: var(--accent); }
+
+#legend-list {
+  display: flex; gap: 6px; overflow-x: auto;
+  padding: 2px 12px 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+#legend-list::-webkit-scrollbar { display: none; }
+
+.chip {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 7px;
+  padding: 8px 12px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--ink-2); color: var(--text);
+  font-size: 12.5px; white-space: nowrap;
+}
+.chip .code {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  color: var(--chip-color, var(--muted)); letter-spacing: 0.04em;
+}
+.chip.active {
+  background: var(--ink-3);
+  border-color: var(--chip-color, var(--accent));
+}
+
+/* ---------- Fiche détail ---------- */
+#info-panel {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 8;
+  background: var(--ink-2);
+  border-top: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+  padding: 15px 16px calc(18px + env(safe-area-inset-bottom));
+  transform: translateY(105%);
+  transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+  max-height: 56vh; overflow-y: auto;
+  box-shadow: 0 -10px 34px rgba(0,0,0,0.6);
+}
+#info-panel.open { transform: translateY(0); }
+#info-panel::before {
+  content: ''; display: block; width: 34px; height: 3px; border-radius: 2px;
+  background: var(--line); margin: -6px auto 12px;
+}
+
+#info-panel-header { display: flex; align-items: flex-start; gap: 12px; }
+#info-title {
+  font-family: var(--font-display);
+  font-size: 19px; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em;
+  margin: 0; text-wrap: balance;
+}
+#info-title .code {
+  font-family: var(--font-mono); font-size: 15px; font-weight: 600;
+  color: var(--accent); margin-right: 8px;
+}
+#info-sub {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em;
+  color: var(--muted); margin: 6px 0 0;
+}
+#info-close {
+  margin-left: auto; flex: 0 0 auto;
+  width: 32px; height: 32px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--ink-3); color: var(--muted);
+  font-size: 14px; line-height: 1;
+}
+#info-close:active { color: var(--text); }
+
+#info-body { margin-top: 12px; font-size: 14px; line-height: 1.55; color: #dbe4f2; }
+#info-body p { margin: 0 0 10px; max-width: 62ch; }
+#info-body .hint { color: var(--muted); font-size: 12px; }
+
+.meta-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.meta {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 5px 9px; border-radius: 7px;
+  background: var(--ink-3); border: 1px solid var(--line);
+}
+.meta .k {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted);
+}
+.meta .v { font-size: 12.5px; }
+
+.point-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.point-chip {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 12px; padding: 6px 10px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--ink-3); color: var(--text);
+}
+.point-chip .code { font-family: var(--font-mono); font-weight: 600; color: var(--accent); }
+.point-chip:active { border-color: var(--accent); }
+
+.section-label {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted);
+  margin: 14px 0 7px;
+}
+
+.disclaimer {
+  margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line);
+  color: var(--muted); font-size: 11px; line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #info-panel, #hint { transition: none; }
+}
+
+/* Écrans larges : la fiche devient un panneau latéral */
+@media (min-width: 760px) {
+  #legend-list { flex-wrap: wrap; overflow: visible; }
+  #info-panel {
+    left: auto; right: 0; top: 0; bottom: 0; width: 360px;
+    max-height: none; border-radius: 0; border-left: 1px solid var(--line); border-top: none;
+    transform: translateX(105%);
+    padding-top: 22px;
+  }
+  #info-panel.open { transform: translateX(0); }
+  #info-panel::before { display: none; }
+  .viewer-controls { bottom: 104px; right: 376px; }
+}
+
+</style>
+
+<div id="app">
+  <header>
+    <div class="wordmark">
+      <h1>Méridiens 3D</h1>
+      <span class="tag">MTC · 14 canaux</span>
+    </div>
+    <div id="search-wrap">
+      <input id="search-input" type="text" placeholder="Point : LI4, Hegu…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Rechercher un point d'acupression" />
+      <div id="search-results"></div>
+    </div>
+  </header>
+
+  <div id="viewer">
+    <canvas id="viewer-canvas"></canvas>
+    <div id="loading">Chargement de la scène 3D…</div>
+    <div class="viewer-controls">
+      <button id="btn-front" aria-label="Vue de face">Face</button>
+      <button id="btn-back" aria-label="Vue de dos">Dos</button>
+      <button id="btn-reset" aria-label="Réinitialiser la vue">↺</button>
+    </div>
+    <div id="hint">
+      Faites pivoter le corps du doigt. <b>Touchez un point</b> ou choisissez un canal ci-dessous.
+    </div>
+  </div>
+
+  <div id="legend">
+    <div id="legend-toolbar">
+      <button id="btn-all">Tout afficher</button>
+    </div>
+    <div id="legend-list"></div>
+  </div>
+
+  <div id="info-panel" role="dialog" aria-label="Détail">
+    <div id="info-panel-header">
+      <div>
+        <h2 id="info-title">—</h2>
+        <p id="info-sub"></p>
+      </div>
+      <button id="info-close" aria-label="Fermer">✕</button>
+    </div>
+    <div id="info-body"></div>
+  </div>
+</div>
+
+<script>
+/* ===== js/vec3.js ===== */
+// Petites fonctions vectorielles 3D (tableaux [x,y,z]) — aucune dépendance externe.
+const V3 = {
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  scale: (a, s) => [a[0] * s, a[1] * s, a[2] * s],
+  lerp: (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t],
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a, b) => [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ],
+  length: (a) => Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]),
+  normalize: (a) => {
+    const len = V3.length(a);
+    if (len < 1e-8) return [0, 0, 0];
+    return [a[0] / len, a[1] / len, a[2] / len];
+  },
+};
+
+if (typeof module !== 'undefined') module.exports = { V3 };
+
+
+/* ===== js/data.js ===== */
+// Données des 12 méridiens principaux + Ren Mai (VC) et Du Mai (VG)
+// Positions 3D approximatives et pédagogiques sur un corps stylisé de 1.78 m
+// (origine au sol entre les pieds, Y = hauteur, X = latéral, Z = profondeur avant/arrière).
+// ⚠️ Ces coordonnées sont illustratives, à but éducatif — pas un outil clinique.
+//
+// Convention : "pos" est donné pour le côté droit du sujet (x >= 0) ; les méridiens
+// bilatéraux sont automatiquement dupliqués en miroir (x négatif) au rendu.
+// Les points du Ren Mai / Du Mai sont sur la ligne médiane (x = 0).
+
+const MERIDIANS = [
+  {
+    id: 'LU', color: '#7ec8e3', bilateral: true,
+    name: 'Poumon', namePinyin: 'Fei Jing', element: 'Métal', yinYang: 'Yin (Bras)',
+    organ: 'Poumons', organKey: 'lungs',
+    description: "Gouverne le Qi et la respiration, régule les liquides organiques et la peau. En lien avec le Gros Intestin.",
+    points: [
+      { id: 'LU1', name: 'Zhongfu', trad: 'Palais Central', pos: [0.16, 1.36, 0.09], info: "Point Mu (alarme) du Poumon. Toux, oppression thoracique, asthme." },
+      { id: 'LU5', name: 'Chize', trad: 'Marais du Coude', pos: [0.19, 1.13, 0.03], info: "Point He (mer). Toux, chaleur du Poumon, douleur du coude." },
+      { id: 'LU6', name: 'Kongzui', trad: 'Trou du Milieu', pos: [0.205, 1.00, 0.03], info: "Point Xi (fissure). Hémoptysie, toux aiguë, asthme." },
+      { id: 'LU7', name: 'Lieque', trad: 'Brèche Céleste', pos: [0.215, 0.905, 0.02], info: "Point clé du Vaisseau Ren. Rhume, cervicalgie, toux." },
+      { id: 'LU9', name: 'Taiyuan', trad: 'Grand Abîme', pos: [0.218, 0.875, 0.01], info: "Point Shu (ruisseau) et point Source. Maître du pouls, toux, poignet." },
+      { id: 'LU10', name: 'Yuji', trad: 'Bord du Poisson', pos: [0.225, 0.79, 0.00], info: "Fièvre, mal de gorge, toux." },
+      { id: 'LU11', name: 'Shaoshang', trad: 'Marchand Mineur', pos: [0.228, 0.685, 0.00], info: "Point Jing (puits). Mal de gorge aigu, urgence, réanimation." },
+    ],
+  },
+  {
+    id: 'LI', color: '#4a90d9', bilateral: true,
+    name: 'Gros Intestin', namePinyin: 'Da Chang Jing', element: 'Métal', yinYang: 'Yang (Bras)',
+    organ: 'Gros Intestin', organKey: 'largeIntestine',
+    description: "Élimination, transit intestinal. Contrôle la peau et le nez avec le Poumon.",
+    points: [
+      { id: 'LI1', name: 'Shangyang', trad: 'Yang Naissant', pos: [0.235, 0.665, 0.01], info: "Point Jing (puits). Mal de gorge, fièvre, urgence." },
+      { id: 'LI4', name: 'Hegu', trad: 'Vallée de la Jonction', pos: [0.24, 0.71, 0.02], info: "Point Source majeur. Douleur, céphalées, points du visage, analgésie." },
+      { id: 'LI10', name: 'Shousanli', trad: 'Trois Lieues du Bras', pos: [0.205, 1.075, 0.02], info: "Douleur du coude/avant-bras, troubles digestifs." },
+      { id: 'LI11', name: 'Quchi', trad: 'Étang au Coude', pos: [0.20, 1.125, 0.02], info: "Point He (mer). Fièvre, hypertension, allergies, coude." },
+      { id: 'LI14', name: 'Binao', trad: 'Bras Lumineux', pos: [0.185, 1.24, 0.01], info: "Douleur d'épaule et de bras." },
+      { id: 'LI15', name: 'Jianyu', trad: 'Os de l\'Épaule', pos: [0.185, 1.40, 0.00], info: "Périarthrite de l'épaule, douleur du bras." },
+      { id: 'LI20', name: 'Yingxiang', trad: 'Accueil des Parfums', pos: [0.02, 1.615, 0.095], info: "Sinusite, rhinite, anosmie." },
+    ],
+  },
+  {
+    id: 'ST', color: '#f4a836', bilateral: true,
+    name: 'Estomac', namePinyin: 'Wei Jing', element: 'Terre', yinYang: 'Yang (Jambe)',
+    organ: 'Estomac', organKey: 'stomach',
+    description: "Réception et décomposition des aliments (avec la Rate). Source du Qi et du Sang post-natal.",
+    points: [
+      { id: 'ST1', name: 'Chengqi', trad: 'Récipient des Larmes', pos: [0.03, 1.655, 0.10], info: "Troubles oculaires, larmoiement." },
+      { id: 'ST2', name: 'Sibai', trad: 'Blancheur des Quatre Directions', pos: [0.035, 1.63, 0.10], info: "Douleur faciale, sinusite." },
+      { id: 'ST6', name: 'Jiache', trad: 'Char de la Mâchoire', pos: [0.075, 1.575, 0.09], info: "Douleur mandibulaire, paralysie faciale." },
+      { id: 'ST8', name: 'Touwei', trad: 'Lien de la Tête', pos: [0.09, 1.73, 0.06], info: "Céphalées frontales, vertige." },
+      { id: 'ST25', name: 'Tianshu', trad: 'Pivot Céleste', pos: [0.09, 1.02, 0.10], info: "Point Mu du Gros Intestin. Diarrhée, constipation, troubles digestifs." },
+      { id: 'ST36', name: 'Zusanli', trad: 'Trois Lieues de Jambe', pos: [0.10, 0.395, 0.045], info: "Point He (mer), tonification majeure. Digestion, immunité, fatigue." },
+      { id: 'ST40', name: 'Fenglong', trad: 'Abondance Luxuriante', pos: [0.115, 0.235, 0.04], info: "Point Luo. Élimine les glaires/humidité, toux grasse." },
+      { id: 'ST44', name: 'Neiting', trad: 'Cour Intérieure', pos: [0.06, 0.03, 0.06], info: "Douleur dentaire, fièvre, troubles digestifs." },
+      { id: 'ST45', name: 'Lidui', trad: 'Échange Rigoureux', pos: [0.065, 0.01, 0.08], info: "Point Jing (puits). Distension abdominale, cauchemars." },
+    ],
+  },
+  {
+    id: 'SP', color: '#f2c94c', bilateral: true,
+    name: 'Rate', namePinyin: 'Pi Jing', element: 'Terre', yinYang: 'Yin (Jambe)',
+    organ: 'Rate / Pancréas', organKey: 'spleen',
+    description: "Transforme et transporte les aliments, contrôle le Sang et les muscles. Origine du Qi post-natal.",
+    points: [
+      { id: 'SP1', name: 'Yinbai', trad: 'Blancheur Cachée', pos: [0.025, 0.01, 0.05], info: "Point Jing (puits). Saignements, troubles digestifs, anxiété." },
+      { id: 'SP3', name: 'Taibai', trad: 'Suprême Blancheur', pos: [0.10, 0.045, 0.06], info: "Point Source. Fatigue, troubles digestifs." },
+      { id: 'SP6', name: 'Sanyinjiao', trad: 'Réunion des Trois Yin', pos: [0.09, 0.235, 0.03], info: "Croisement des 3 méridiens Yin de jambe. Gynécologie, digestion, sommeil." },
+      { id: 'SP9', name: 'Yinlingquan', trad: 'Source du Tertre Yin', pos: [0.10, 0.45, 0.02], info: "Élimine l'humidité, œdèmes, troubles urinaires." },
+      { id: 'SP10', name: 'Xuehai', trad: 'Mer du Sang', pos: [0.11, 0.52, 0.06], info: "Régule le Sang, troubles gynécologiques, peau." },
+      { id: 'SP21', name: 'Dabao', trad: 'Grand Enveloppement', pos: [0.19, 1.28, -0.03], info: "Point Luo général de la Rate. Douleurs thoraciques diffuses." },
+    ],
+  },
+  {
+    id: 'HT', color: '#e74c3c', bilateral: true,
+    name: 'Cœur', namePinyin: 'Xin Jing', element: 'Feu', yinYang: 'Yin (Bras)',
+    organ: 'Cœur', organKey: 'heart',
+    description: "Abrite le Shen (esprit/conscience), gouverne le Sang et les vaisseaux.",
+    points: [
+      { id: 'HT1', name: 'Jiquan', trad: 'Source Suprême', pos: [0.15, 1.395, -0.02], info: "Douleur thoracique, aisselle, anxiété." },
+      { id: 'HT3', name: 'Shaohai', trad: 'Petite Mer', pos: [0.185, 1.115, -0.02], info: "Point He (mer). Douleur du coude, anxiété." },
+      { id: 'HT5', name: 'Tongli', trad: 'Communication Interne', pos: [0.205, 0.90, -0.01], info: "Point Luo. Palpitations, aphasie, anxiété." },
+      { id: 'HT7', name: 'Shenmen', trad: 'Porte de l\'Esprit', pos: [0.213, 0.865, -0.01], info: "Point Source. Insomnie, anxiété, palpitations — point clé du Shen." },
+      { id: 'HT9', name: 'Shaochong', trad: 'Petit Galop', pos: [0.222, 0.685, -0.01], info: "Point Jing (puits). Perte de conscience, palpitations." },
+    ],
+  },
+  {
+    id: 'SI', color: '#ff6f91', bilateral: true,
+    name: 'Intestin Grêle', namePinyin: 'Xiao Chang Jing', element: 'Feu', yinYang: 'Yang (Bras)',
+    organ: 'Intestin Grêle', organKey: 'smallIntestine',
+    description: "Sépare le pur de l'impur dans la digestion. Lié au Cœur.",
+    points: [
+      { id: 'SI1', name: 'Shaoze', trad: 'Petit Marais', pos: [0.232, 0.665, -0.01], info: "Point Jing (puits). Lactation, mal de gorge." },
+      { id: 'SI3', name: 'Houxi', trad: 'Ruisseau Postérieur', pos: [0.235, 0.70, -0.02], info: "Point clé du Vaisseau Gouverneur. Raideur nuque/dos, fièvre." },
+      { id: 'SI8', name: 'Xiaohai', trad: 'Petite Mer', pos: [0.20, 1.12, -0.03], info: "Point He (mer). Douleur du coude, névralgie du cubital." },
+      { id: 'SI11', name: 'Tianzong', trad: 'Ancêtre Céleste', pos: [0.11, 1.37, -0.10], info: "Douleur scapulaire, épaule." },
+      { id: 'SI18', name: 'Quanliao', trad: 'Os de la Pommette', pos: [0.06, 1.615, 0.09], info: "Douleur faciale, paralysie faciale." },
+      { id: 'SI19', name: 'Tinggong', trad: 'Palais de l\'Écoute', pos: [0.075, 1.615, 0.01], info: "Acouphènes, surdité, douleur de l'oreille." },
+    ],
+  },
+  {
+    id: 'BL', color: '#2c3e91', bilateral: true,
+    name: 'Vessie', namePinyin: 'Pang Guang Jing', element: 'Eau', yinYang: 'Yang (Jambe)',
+    organ: 'Vessie', organKey: 'bladder',
+    description: "Le plus long méridien : longe tout le dos, porte les points Shu du dos reliés à chaque organe. Élimination des liquides.",
+    points: [
+      { id: 'BL1', name: 'Jingming', trad: 'Brillance Oculaire', pos: [0.015, 1.655, 0.10], info: "Troubles oculaires de toutes sortes." },
+      { id: 'BL2', name: 'Zanzhu', trad: 'Bambous Réunis', pos: [0.02, 1.675, 0.10], info: "Céphalées, troubles oculaires." },
+      { id: 'BL10', name: 'Tianzhu', trad: 'Pilier Céleste', pos: [0.02, 1.51, -0.09], info: "Cervicalgie, céphalées occipitales." },
+      { id: 'BL13', name: 'Feishu', trad: 'Shu du Poumon', pos: [0.04, 1.365, -0.10], info: "Point Shu du dos du Poumon. Toux, asthme, affections respiratoires." },
+      { id: 'BL15', name: 'Xinshu', trad: 'Shu du Cœur', pos: [0.04, 1.30, -0.10], info: "Point Shu du dos du Cœur. Anxiété, palpitations, insomnie." },
+      { id: 'BL18', name: 'Ganshu', trad: 'Shu du Foie', pos: [0.04, 1.135, -0.09], info: "Point Shu du dos du Foie. Troubles hépatiques, yeux, colère." },
+      { id: 'BL20', name: 'Pishu', trad: 'Shu de la Rate', pos: [0.04, 1.06, -0.09], info: "Point Shu du dos de la Rate. Digestion, fatigue." },
+      { id: 'BL23', name: 'Shenshu', trad: 'Shu du Rein', pos: [0.04, 0.985, -0.08], info: "Point Shu du dos du Rein. Lombalgie, fatigue, énergie vitale." },
+      { id: 'BL25', name: 'Dachangshu', trad: 'Shu du Gros Intestin', pos: [0.04, 0.92, -0.08], info: "Point Shu du dos du Gros Intestin. Lombalgie, constipation." },
+      { id: 'BL40', name: 'Weizhong', trad: 'Milieu du Pli', pos: [0.05, 0.47, -0.03], info: "Point He (mer), point maître du dos. Lombalgie, sciatique." },
+      { id: 'BL57', name: 'Chengshan', trad: 'Soutien de la Montagne', pos: [0.045, 0.235, -0.04], info: "Crampes du mollet, sciatique, hémorroïdes." },
+      { id: 'BL60', name: 'Kunlun', trad: 'Mont Kunlun', pos: [0.065, 0.085, -0.02], info: "Céphalées, lombalgie, douleur de cheville." },
+      { id: 'BL67', name: 'Zhiyin', trad: 'Atteinte du Yin', pos: [0.055, 0.005, 0.06], info: "Point Jing (puits). Version fœtale, accouchement difficile, céphalées." },
+    ],
+  },
+  {
+    id: 'KI', color: '#1b2a4a', bilateral: true,
+    name: 'Rein', namePinyin: 'Shen Jing', element: 'Eau', yinYang: 'Yin (Jambe)',
+    organ: 'Reins', organKey: 'kidneys',
+    description: "Réserve l'essence (Jing), racine du Yin et du Yang du corps, contrôle les os et la reproduction.",
+    points: [
+      { id: 'KI1', name: 'Yongquan', trad: 'Source Jaillissante', pos: [0.035, 0.005, 0.03], info: "Point Jing (puits). Réanimation, hypertension, ancrage de l'énergie." },
+      { id: 'KI3', name: 'Taixi', trad: 'Grand Torrent', pos: [0.065, 0.085, -0.02], info: "Point Source. Fatigue rénale, acouphènes, lombalgie." },
+      { id: 'KI6', name: 'Zhaohai', trad: 'Mer Brillante', pos: [0.055, 0.06, 0.01], info: "Point clé du Vaisseau Yin Qiao. Insomnie, gorge sèche, gynécologie." },
+      { id: 'KI7', name: 'Fuliu', trad: 'Retour du Courant', pos: [0.065, 0.155, -0.02], info: "Point Jing (rivière). Sueurs, œdèmes, troubles urinaires." },
+      { id: 'KI27', name: 'Shufu', trad: 'Palais du Transport', pos: [0.03, 1.42, 0.08], info: "Toux, oppression thoracique, asthme." },
+    ],
+  },
+  {
+    id: 'PC', color: '#a66bbe', bilateral: true,
+    name: 'Maître du Cœur', namePinyin: 'Xin Bao Jing', element: 'Feu', yinYang: 'Yin (Bras)',
+    organ: 'Péricarde', organKey: 'pericardium',
+    description: "Protège le Cœur, régule la circulation et les émotions ; impliqué dans la sexualité et le système circulatoire.",
+    points: [
+      { id: 'PC3', name: 'Quze', trad: 'Marais du Coude', pos: [0.17, 1.115, 0.05], info: "Point He (mer). Douleur du coude, nausées, chaleur." },
+      { id: 'PC6', name: 'Neiguan', trad: 'Barrière Interne', pos: [0.20, 0.905, 0.02], info: "Point clé du Vaisseau Yin Wei. Nausées, anxiété, palpitations — point majeur." },
+      { id: 'PC7', name: 'Daling', trad: 'Grand Monticule', pos: [0.205, 0.875, 0.02], info: "Point Source. Anxiété, douleur du poignet." },
+      { id: 'PC8', name: 'Laogong', trad: 'Palais du Labeur', pos: [0.19, 0.72, 0.04], info: "Point Ying (source). Chaleur, anxiété, transpiration des mains." },
+      { id: 'PC9', name: 'Zhongchong', trad: 'Assaut du Milieu', pos: [0.20, 0.685, 0.03], info: "Point Jing (puits). Urgence, perte de conscience, fièvre." },
+    ],
+  },
+  {
+    id: 'TE', color: '#d98cd9', bilateral: true,
+    name: 'Triple Réchauffeur', namePinyin: 'San Jiao Jing', element: 'Feu', yinYang: 'Yang (Bras)',
+    organ: 'San Jiao (fonction, non organe anatomique)', organKey: 'tripleWarmer',
+    description: "Concept fonctionnel régulant les échanges d'eau et d'énergie entre les 3 foyers (thoracique, épigastrique, pelvien).",
+    points: [
+      { id: 'TE3', name: 'Zhongzhu', trad: 'Îlot du Milieu', pos: [0.235, 0.735, -0.01], info: "Céphalées, acouphènes, douleur des doigts." },
+      { id: 'TE5', name: 'Waiguan', trad: 'Barrière Externe', pos: [0.20, 0.905, -0.02], info: "Point clé du Vaisseau Yang Wei. Fièvre, céphalées, douleur du bras." },
+      { id: 'TE14', name: 'Jianliao', trad: 'Faille de l\'Épaule', pos: [0.19, 1.395, -0.03], info: "Périarthrite de l'épaule." },
+      { id: 'TE17', name: 'Yifeng', trad: 'Écran du Vent', pos: [0.085, 1.60, -0.05], info: "Acouphènes, surdité, paralysie faciale." },
+      { id: 'TE23', name: 'Sizhukong', trad: 'Bosquet de Bambous Fins', pos: [0.06, 1.685, 0.06], info: "Céphalées temporales, troubles oculaires." },
+    ],
+  },
+  {
+    id: 'GB', color: '#2ecc71', bilateral: true,
+    name: 'Vésicule Biliaire', namePinyin: 'Dan Jing', element: 'Bois', yinYang: 'Yang (Jambe)',
+    organ: 'Vésicule Biliaire', organKey: 'gallbladder',
+    description: "Stocke la bile, gouverne la prise de décision et les tendons. Trajet sinueux sur le côté du corps.",
+    points: [
+      { id: 'GB1', name: 'Tongziliao', trad: 'Faille de la Pupille', pos: [0.09, 1.655, 0.05], info: "Céphalées temporales, troubles oculaires." },
+      { id: 'GB14', name: 'Yangbai', trad: 'Blancheur Yang', pos: [0.075, 1.72, 0.08], info: "Céphalées frontales, paralysie faciale." },
+      { id: 'GB20', name: 'Fengchi', trad: 'Étang du Vent', pos: [0.06, 1.545, -0.08], info: "Céphalées, cervicalgie, vertige, rhume — point très utilisé." },
+      { id: 'GB21', name: 'Jianjing', trad: 'Puits de l\'Épaule', pos: [0.11, 1.45, -0.03], info: "Tension d'épaule/nuque, lactation." },
+      { id: 'GB30', name: 'Huantiao', trad: 'Bond du Bond', pos: [0.13, 0.83, -0.08], info: "Sciatique, douleur de hanche — point majeur du membre inférieur." },
+      { id: 'GB34', name: 'Yanglingquan', trad: 'Source du Tertre Yang', pos: [0.135, 0.44, -0.01], info: "Point He (mer), point maître des tendons. Douleur des tendons/genou." },
+      { id: 'GB39', name: 'Xuanzhong', trad: 'Clochette Suspendue', pos: [0.11, 0.145, -0.02], info: "Point maître de la moelle. Raideur cervicale, jambes." },
+      { id: 'GB40', name: 'Qiuxu', trad: 'Colline en Ruines', pos: [0.10, 0.075, 0.02], info: "Point Source. Douleur de cheville, distension thoracique." },
+    ],
+  },
+  {
+    id: 'LR', color: '#27ae60', bilateral: true,
+    name: 'Foie', namePinyin: 'Gan Jing', element: 'Bois', yinYang: 'Yin (Jambe)',
+    organ: 'Foie', organKey: 'liver',
+    description: "Assure la libre circulation du Qi, stocke le Sang, gouverne les tendons et les émotions (colère/frustration).",
+    points: [
+      { id: 'LR1', name: 'Dadun', trad: 'Gros Généreux', pos: [0.02, 0.005, 0.07], info: "Point Jing (puits). Troubles gynécologiques, hernie." },
+      { id: 'LR2', name: 'Xingjian', trad: 'Espace Interstitiel', pos: [0.045, 0.02, 0.06], info: "Colère, céphalées, yeux rouges — draine le feu du Foie." },
+      { id: 'LR3', name: 'Taichong', trad: 'Grand Torrent', pos: [0.06, 0.06, 0.05], info: "Point Source majeur. Stress, colère, céphalées, tension — très utilisé." },
+      { id: 'LR8', name: 'Ququan', trad: 'Source Sinueuse', pos: [0.11, 0.47, 0.04], info: "Point He (mer). Troubles gynécologiques, douleur du genou interne." },
+      { id: 'LR14', name: 'Qimen', trad: 'Porte de l\'Espoir', pos: [0.14, 1.29, 0.08], info: "Point Mu du Foie. Oppression thoracique, irritabilité." },
+    ],
+  },
+  {
+    id: 'CV', color: '#e67e22', bilateral: false,
+    name: 'Vaisseau Conception', namePinyin: 'Ren Mai', element: '—', yinYang: 'Mer du Yin',
+    organ: 'Utérus / abdomen (Champ de Cinabre)', organKey: 'lowerAbdomen',
+    description: "Ligne médiane antérieure, « mer des méridiens Yin ». Régule l'utérus, la grossesse et l'énergie originelle (Dan Tian).",
+    points: [
+      { id: 'CV3', name: 'Zhongji', trad: 'Faîte Suprême', pos: [0, 0.855, 0.06], info: "Point Mu de la Vessie. Troubles urinaires et gynécologiques." },
+      { id: 'CV4', name: 'Guanyuan', trad: 'Barrière Originelle', pos: [0, 0.885, 0.07], info: "Point Mu de l'Intestin Grêle. Tonifie l'énergie originelle, fatigue, gynécologie." },
+      { id: 'CV6', name: 'Qihai', trad: 'Mer du Qi', pos: [0, 0.925, 0.08], info: "Réservoir de l'énergie vitale. Fatigue générale, tonification." },
+      { id: 'CV8', name: 'Shenque', trad: 'Palais de l\'Esprit (Nombril)', pos: [0, 1.02, 0.085], info: "Nombril. Utilisé en moxibustion pour réchauffer et tonifier." },
+      { id: 'CV12', name: 'Zhongwan', trad: 'Milieu de l\'Épigastre', pos: [0, 1.12, 0.09], info: "Point Mu de l'Estomac. Digestion, douleur épigastrique." },
+      { id: 'CV17', name: 'Danzhong', trad: 'Centre Thoracique', pos: [0, 1.31, 0.10], info: "Point Mu du Péricarde. Oppression thoracique, anxiété, lactation." },
+      { id: 'CV22', name: 'Tiantu', trad: 'Cheminée Céleste', pos: [0, 1.485, 0.06], info: "Toux, asthme, boule dans la gorge." },
+      { id: 'CV24', name: 'Chengjiang', trad: 'Réceptacle des Fluides', pos: [0, 1.555, 0.10], info: "Paralysie faciale, douleur du menton." },
+    ],
+  },
+  {
+    id: 'GV', color: '#8a8f98', bilateral: false,
+    name: 'Vaisseau Gouverneur', namePinyin: 'Du Mai', element: '—', yinYang: 'Mer du Yang',
+    organ: 'Colonne vertébrale / cerveau', organKey: 'spineBrain',
+    description: "Ligne médiane postérieure, « mer des méridiens Yang ». Gouverne la colonne vertébrale, le cerveau et l'énergie Yang.",
+    points: [
+      { id: 'GV1', name: 'Changqiang', trad: 'Force Durable', pos: [0, 0.80, -0.05], info: "Hémorroïdes, troubles du bas du dos." },
+      { id: 'GV4', name: 'Mingmen', trad: 'Porte de la Vie', pos: [0, 0.985, -0.08], info: "Feu vital (Mingmen), lombalgie, fatigue, énergie du Rein." },
+      { id: 'GV14', name: 'Dazhui', trad: 'Grande Vertèbre', pos: [0, 1.455, -0.06], info: "Réunion de tous les méridiens Yang. Fièvre, rhume, immunité." },
+      { id: 'GV16', name: 'Fengfu', trad: 'Palais du Vent', pos: [0, 1.615, -0.10], info: "Céphalées occipitales, raideur nuque." },
+      { id: 'GV20', name: 'Baihui', trad: 'Cent Réunions', pos: [0, 1.79, 0.00], info: "Sommet du crâne, point majeur du Shen. Vertige, mémoire, prolapsus, méditation." },
+      { id: 'GV26', name: 'Renzhong', trad: 'Milieu de l\'Homme', pos: [0, 1.585, 0.105], info: "Point de réanimation d'urgence, perte de conscience." },
+    ],
+  },
+];
+
+// Organes stylisés affichés à l'intérieur du buste (formes simplifiées, non anatomiquement exactes)
+const ORGAN_SHAPES = {
+  lungs: { label: 'Poumons', color: '#7ec8e3', parts: [
+    { type: 'ellipsoid', pos: [0.08, 1.32, 0.02], scale: [0.055, 0.11, 0.06] },
+    { type: 'ellipsoid', pos: [-0.08, 1.32, 0.02], scale: [0.055, 0.11, 0.06] },
+  ]},
+  heart: { label: 'Cœur', color: '#e74c3c', parts: [
+    { type: 'ellipsoid', pos: [-0.02, 1.28, 0.03], scale: [0.05, 0.06, 0.05] },
+  ]},
+  largeIntestine: { label: 'Gros Intestin', color: '#4a90d9', parts: [
+    { type: 'torus', pos: [0, 0.95, 0.02], scale: [0.11, 0.11, 0.05] },
+  ]},
+  stomach: { label: 'Estomac', color: '#f4a836', parts: [
+    { type: 'ellipsoid', pos: [-0.06, 1.13, 0.04], scale: [0.07, 0.06, 0.05] },
+  ]},
+  spleen: { label: 'Rate', color: '#f2c94c', parts: [
+    { type: 'ellipsoid', pos: [-0.12, 1.16, -0.02], scale: [0.045, 0.06, 0.04] },
+  ]},
+  smallIntestine: { label: 'Intestin Grêle', color: '#ff6f91', parts: [
+    { type: 'ellipsoid', pos: [0, 0.93, 0.03], scale: [0.09, 0.08, 0.06] },
+  ]},
+  bladder: { label: 'Vessie', color: '#2c3e91', parts: [
+    { type: 'ellipsoid', pos: [0, 0.855, 0.03], scale: [0.06, 0.05, 0.05] },
+  ]},
+  kidneys: { label: 'Reins', color: '#1b2a4a', parts: [
+    { type: 'ellipsoid', pos: [0.07, 1.02, -0.06], scale: [0.035, 0.06, 0.03] },
+    { type: 'ellipsoid', pos: [-0.07, 1.02, -0.06], scale: [0.035, 0.06, 0.03] },
+  ]},
+  pericardium: { label: 'Péricarde', color: '#a66bbe', parts: [
+    { type: 'ellipsoid', pos: [-0.02, 1.28, 0.03], scale: [0.065, 0.075, 0.065], wire: true },
+  ]},
+  tripleWarmer: { label: 'San Jiao (3 foyers)', color: '#d98cd9', parts: [
+    { type: 'ellipsoid', pos: [0, 1.15, 0], scale: [0.15, 0.32, 0.10], wire: true },
+  ]},
+  gallbladder: { label: 'Vésicule Biliaire', color: '#2ecc71', parts: [
+    { type: 'ellipsoid', pos: [0.11, 1.15, 0.05], scale: [0.025, 0.04, 0.025] },
+  ]},
+  liver: { label: 'Foie', color: '#27ae60', parts: [
+    { type: 'ellipsoid', pos: [0.10, 1.18, 0.05], scale: [0.09, 0.06, 0.06] },
+  ]},
+  lowerAbdomen: { label: 'Champ de Cinabre (Dan Tian)', color: '#e67e22', parts: [
+    { type: 'ellipsoid', pos: [0, 0.90, 0.03], scale: [0.08, 0.08, 0.06], wire: true },
+  ]},
+  spineBrain: { label: 'Colonne / Cerveau', color: '#8a8f98', parts: [
+    { type: 'ellipsoid', pos: [0, 1.68, 0], scale: [0.08, 0.08, 0.08], wire: true },
+  ]},
+};
+
+if (typeof module !== 'undefined') module.exports = { MERIDIANS, ORGAN_SHAPES };
+
+
+/* ===== js/geometry.js ===== */
+// Description géométrique d'un corps humain stylisé (chaînes de sphères)
+// et des organes internes simplifiés, à partir des données de data.js.
+
+function chain(from, to, radiusFrom, radiusTo, steps) {
+  const spheres = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    spheres.push({
+      pos: V3.lerp(from, to, t),
+      radius: radiusFrom + (radiusTo - radiusFrom) * t,
+    });
+  }
+  return spheres;
+}
+
+function buildBodyGeometry() {
+  const skin = { color: '#e8c9a8', alpha: 0.9 };
+  const parts = [];
+
+  // Tête
+  parts.push({ pos: [0, 1.685, 0], radius: 0.115 });
+  parts.push({ pos: [0, 1.735, 0], radius: 0.10 });
+  parts.push({ pos: [0, 1.63, 0], radius: 0.10 });
+
+  // Cou
+  parts.push(...chain([0, 1.47, 0], [0, 1.565, 0], 0.05, 0.045, 5));
+
+  // Torse (épaules -> taille -> bassin)
+  parts.push(...chain([0, 1.30, 0.01], [0, 1.47, 0], 0.145, 0.20, 10));
+  parts.push(...chain([0, 1.05, 0.01], [0, 1.30, 0.01], 0.125, 0.145, 10));
+  parts.push(...chain([0, 0.84, 0], [0, 1.05, 0.01], 0.15, 0.125, 8));
+
+  // Bras
+  [1, -1].forEach((side) => {
+    const shoulder = [0.19 * side, 1.44, 0];
+    const elbow = [0.235 * side, 1.13, 0.02];
+    const wrist = [0.245 * side, 0.885, 0.02];
+    const hand = [0.25 * side, 0.70, 0.02];
+    const fingers = [0.252 * side, 0.66, 0.02];
+    parts.push(...chain(shoulder, elbow, 0.05, 0.038, 7));
+    parts.push(...chain(elbow, wrist, 0.036, 0.028, 6));
+    parts.push(...chain(wrist, hand, 0.03, 0.024, 3));
+    parts.push(...chain(hand, fingers, 0.022, 0.014, 2));
+  });
+
+  // Jambes
+  [1, -1].forEach((side) => {
+    const hip = [0.10 * side, 0.84, 0];
+    const knee = [0.095 * side, 0.46, 0.02];
+    const ankle = [0.075 * side, 0.09, 0.01];
+    const foot = [0.075 * side, 0.02, 0.09];
+    parts.push(...chain(hip, knee, 0.08, 0.055, 8));
+    parts.push(...chain(knee, ankle, 0.052, 0.036, 7));
+    parts.push(...chain(ankle, foot, 0.034, 0.03, 2));
+  });
+
+  return parts.map((p) => ({ ...p, color: skin.color, alpha: skin.alpha }));
+}
+
+function buildOrganGeometry(ORGAN_SHAPES) {
+  const parts = [];
+  Object.entries(ORGAN_SHAPES).forEach(([key, def]) => {
+    def.parts.forEach((part) => {
+      const avgScale = part.type === 'torus'
+        ? part.scale[0]
+        : (part.scale[0] + part.scale[1] + part.scale[2]) / 3;
+      if (part.type === 'torus') {
+        // approxime le tore par un anneau de petites sphères
+        const n = 10;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          parts.push({
+            pos: [
+              part.pos[0] + Math.cos(a) * part.scale[0],
+              part.pos[1],
+              part.pos[2] + Math.sin(a) * part.scale[0],
+            ],
+            radius: part.scale[2],
+            color: def.color,
+            alpha: 0.5,
+            organKey: key,
+            wire: !!part.wire,
+          });
+        }
+      } else {
+        parts.push({
+          pos: part.pos,
+          radius: avgScale,
+          color: def.color,
+          alpha: part.wire ? 0.22 : 0.55,
+          organKey: key,
+          wire: !!part.wire,
+        });
+      }
+    });
+  });
+  return parts;
+}
+
+if (typeof module !== 'undefined') module.exports = { buildBodyGeometry, buildOrganGeometry };
+
+
+/* ===== js/engine.js ===== */
+// Moteur de rendu 3D minimaliste en Canvas 2D : projection perspective manuelle,
+// tri peintre (painter's algorithm) et contrôles orbitaux tactiles/souris.
+// Aucune dépendance externe — conçu pour tourner offline sur iPhone (Safari/PWA).
+
+function createEngine(canvas) {
+  const ctx = canvas.getContext('2d');
+  let width = 0, height = 0, dpr = 1;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = canvas.clientWidth;
+    height = canvas.clientHeight;
+    canvas.width = Math.max(1, Math.round(width * dpr));
+    canvas.height = Math.max(1, Math.round(height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const camera = {
+    target: [0, 1.05, 0],
+    radius: 3.0,
+    theta: 0.25, // azimut (rad)
+    phi: 1.42,   // élévation depuis l'axe Y (rad), ~PI/2 = niveau des yeux
+    fov: 40 * Math.PI / 180,
+    minRadius: 0.55,
+    maxRadius: 5.5,
+    // Surface masquée par la fiche de détail (en pixels). La scène est cadrée
+    // dans la zone réellement visible, jamais sous le panneau.
+    occludedBottom: 0,
+    occludedRight: 0,
+  };
+
+  function clampPhi(p) { return Math.max(0.12, Math.min(Math.PI - 0.12, p)); }
+  function clampRadius(r) { return Math.max(camera.minRadius, Math.min(camera.maxRadius, r)); }
+
+  function getCameraPosition() {
+    const { target, radius, theta, phi } = camera;
+    return [
+      target[0] + radius * Math.sin(phi) * Math.sin(theta),
+      target[1] + radius * Math.cos(phi),
+      target[2] + radius * Math.sin(phi) * Math.cos(theta),
+    ];
+  }
+
+  function getBasis() {
+    const camPos = getCameraPosition();
+    let z = V3.normalize(V3.sub(camPos, camera.target));
+    if (V3.length(z) < 1e-6) z = [0, 0, 1];
+    let x = V3.normalize(V3.cross([0, 1, 0], z));
+    if (!isFinite(x[0]) || V3.length(x) < 1e-6) x = [1, 0, 0];
+    const y = V3.cross(z, x);
+    return { camPos, x, y, z };
+  }
+
+  // Projette un point monde -> {x, y (pixels CSS), dist (profondeur caméra), scale (px/mètre)}
+  function project(pos, basis) {
+    const rel = V3.sub(pos, basis.camPos);
+    const camX = V3.dot(rel, basis.x);
+    const camY = V3.dot(rel, basis.y);
+    const camZ = V3.dot(rel, basis.z);
+    const dist = -camZ;
+    if (dist <= 0.02) return null;
+    // Cadrage sur la zone visible (ce que la fiche ne recouvre pas)
+    const usableH = Math.max(160, height - camera.occludedBottom);
+    const usableW = Math.max(160, width - camera.occludedRight);
+    const f = (usableH / 2) / Math.tan(camera.fov / 2);
+    const scale = f / dist;
+    return {
+      x: usableW / 2 + camX * scale,
+      y: usableH / 2 - camY * scale,
+      dist,
+      scale,
+    };
+  }
+
+  // ---- Contrôles orbitaux (souris + tactile, y compris pincement) ----
+  let dragging = false;
+  let lastX = 0, lastY = 0;
+  let pinchStartDist = 0;
+  let pinchStartRadius = 0;
+  const activePointers = new Map();
+
+  function pointerDistance() {
+    const pts = Array.from(activePointers.values());
+    if (pts.length < 2) return 0;
+    const dx = pts[0].x - pts[1].x, dy = pts[0].y - pts[1].y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  canvas.style.touchAction = 'none';
+
+  canvas.addEventListener('pointerdown', (e) => {
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    canvas.setPointerCapture(e.pointerId);
+    if (activePointers.size === 1) {
+      dragging = true;
+      lastX = e.clientX; lastY = e.clientY;
+    } else if (activePointers.size === 2) {
+      dragging = false;
+      pinchStartDist = pointerDistance();
+      pinchStartRadius = camera.radius;
+    }
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.size >= 2) {
+      const d = pointerDistance();
+      if (pinchStartDist > 10 && d > 10) {
+        camera.radius = clampRadius(pinchStartRadius * (pinchStartDist / d));
+      }
+      return;
+    }
+    if (dragging) {
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      camera.theta -= dx * 0.008;
+      camera.phi = clampPhi(camera.phi - dy * 0.008);
+    }
+  });
+
+  function endPointer(e) {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size < 2) { pinchStartDist = 0; }
+    if (activePointers.size === 0) { dragging = false; }
+    else if (activePointers.size === 1) {
+      const pt = Array.from(activePointers.values())[0];
+      dragging = true; lastX = pt.x; lastY = pt.y;
+    }
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerleave', (e) => { if (activePointers.has(e.pointerId)) endPointer(e); });
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    camera.radius = clampRadius(camera.radius * (1 + e.deltaY * 0.001));
+  }, { passive: false });
+
+  return {
+    ctx, camera,
+    get width() { return width; },
+    get height() { return height; },
+    getCameraPosition, getBasis, project,
+    isDragBusy: () => dragging || activePointers.size > 1,
+  };
+}
+
+if (typeof module !== 'undefined') module.exports = { createEngine };
+
+
+/* ===== js/app.js ===== */
+(function () {
+  'use strict';
+
+  const canvas = document.getElementById('viewer-canvas');
+  const infoPanel = document.getElementById('info-panel');
+  const infoTitle = document.getElementById('info-title');
+  const infoSub = document.getElementById('info-sub');
+  const infoBody = document.getElementById('info-body');
+  const infoClose = document.getElementById('info-close');
+  const legendList = document.getElementById('legend-list');
+  const btnFront = document.getElementById('btn-front');
+  const btnBack = document.getElementById('btn-back');
+  const btnReset = document.getElementById('btn-reset');
+  const btnAll = document.getElementById('btn-all');
+  const searchInput = document.getElementById('search-input');
+  const searchResults = document.getElementById('search-results');
+  const loadingEl = document.getElementById('loading');
+  const hintEl = document.getElementById('hint');
+
+  const DISCLAIMER = "Positions indicatives et simplifiées, à but pédagogique. Ne remplace pas un avis médical ni la formation d'un praticien.";
+
+  function setAccent(color) {
+    document.documentElement.style.setProperty('--accent', color || '#d9c3a5');
+  }
+
+  // La fiche de détail recouvre le bas de l'écran (ou la droite sur grand écran).
+  // On recadre la scène sur la surface qui reste visible.
+  let occludedTarget = { bottom: 0, right: 0 };
+  function updateSceneShift(panelOpen) {
+    if (!panelOpen) { occludedTarget = { bottom: 0, right: 0 }; return; }
+    const isSidePanel = window.innerWidth >= 760;
+    if (isSidePanel) {
+      occludedTarget = { bottom: 0, right: Math.min(infoPanel.offsetWidth, engine.width * 0.5) };
+    } else {
+      occludedTarget = { bottom: Math.min(infoPanel.offsetHeight, engine.height * 0.62), right: 0 };
+    }
+  }
+  function dismissHint() {
+    if (hintEl) hintEl.classList.add('hidden');
+  }
+
+  const engine = createEngine(canvas);
+
+  // ---- Géométrie statique du corps et des organes ----
+  const bodyParts = buildBodyGeometry();
+  const organParts = buildOrganGeometry(ORGAN_SHAPES);
+
+  // ---- Méridiens : segments de ligne + points d'acupression ----
+  const meridianSegments = []; // { a, b, color, meridianId }
+  const acupoints = []; // { pos, meridian, point, side, color, screen:{x,y,dist} }
+
+  function mirrorX(pos) { return [-pos[0], pos[1], pos[2]]; }
+
+  MERIDIANS.forEach((meridian) => {
+    const sides = meridian.bilateral ? ['R', 'L'] : ['C'];
+    sides.forEach((side) => {
+      const positions = meridian.points.map((p) => (side === 'L' ? mirrorX(p.pos) : p.pos));
+      for (let i = 0; i < positions.length - 1; i++) {
+        meridianSegments.push({ a: positions[i], b: positions[i + 1], color: meridian.color, meridianId: meridian.id });
+      }
+      meridian.points.forEach((point, idx) => {
+        acupoints.push({
+          pos: positions[idx],
+          meridian, point, side,
+          color: meridian.color,
+          screen: null,
+        });
+      });
+    });
+  });
+
+  // ---- État de sélection ----
+  let selectedMeridianId = null;
+  let selectedAcupoint = null;
+
+  function isMeridianActive(id) { return !selectedMeridianId || selectedMeridianId === id; }
+  function isOrganActive(key) {
+    if (!selectedMeridianId) return null; // null = état neutre
+    const m = MERIDIANS.find((mm) => mm.id === selectedMeridianId);
+    return m && m.organKey === key;
+  }
+
+  // ---- UI : légende des méridiens ----
+  function buildLegend() {
+    legendList.innerHTML = '';
+    MERIDIANS.forEach((m) => {
+      const chip = document.createElement('button');
+      chip.className = 'chip';
+      chip.style.setProperty('--chip-color', m.color);
+      chip.innerHTML = `<span class="dot" style="background:${m.color}"></span><span class="code">${m.id}</span>${m.name}`;
+      chip.addEventListener('click', () => toggleMeridian(m.id));
+      legendList.appendChild(chip);
+    });
+  }
+  buildLegend();
+
+  function highlightChip(id) {
+    Array.from(legendList.children).forEach((chip, i) => {
+      chip.classList.toggle('active', MERIDIANS[i].id === id);
+    });
+  }
+
+  function toggleMeridian(id) {
+    dismissHint();
+    if (selectedMeridianId === id) {
+      selectedMeridianId = null;
+      highlightChip(null);
+      setAccent(null);
+      hideInfoPanel();
+    } else {
+      selectedMeridianId = id;
+      selectedAcupoint = null;
+      highlightChip(id);
+      showMeridianInfo(MERIDIANS.find((m) => m.id === id));
+    }
+  }
+
+  function showMeridianInfo(meridian) {
+    setAccent(meridian.color);
+    infoPanel.classList.add('open');
+    infoTitle.innerHTML = `<span class="code">${meridian.id}</span>${meridian.name}`;
+    infoSub.textContent = `${meridian.namePinyin} · ${meridian.yinYang}`;
+    infoBody.innerHTML = `
+      <div class="meta-row">
+        <span class="meta"><span class="k">Élément</span><span class="v">${meridian.element}</span></span>
+        <span class="meta"><span class="k">Organe</span><span class="v">${meridian.organ}</span></span>
+        <span class="meta"><span class="k">Points</span><span class="v">${meridian.points.length}</span></span>
+      </div>
+      <p>${meridian.description}</p>
+      <div class="section-label">Points du canal</div>
+      <div class="point-list">
+        ${meridian.points.map((p) => `<button class="point-chip" data-point="${p.id}"><span class="code">${p.id}</span>${p.name}</button>`).join('')}
+      </div>
+      <p class="disclaimer">${DISCLAIMER}</p>
+    `;
+    infoBody.querySelectorAll('.point-chip').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const p = meridian.points.find((pt) => pt.id === btn.dataset.point);
+        showPointInfo(meridian, p, 'R');
+        focusOnPosition(p.pos);
+      });
+    });
+    requestAnimationFrame(() => updateSceneShift(true));
+  }
+
+  function showPointInfo(meridian, point, side) {
+    dismissHint();
+    setAccent(meridian.color);
+    selectedAcupoint = { meridian, point, side };
+    infoPanel.classList.add('open');
+    infoTitle.innerHTML = `<span class="code">${point.id}</span>${point.name}`;
+    infoSub.textContent = `« ${point.trad} »`;
+    const sideLabel = side === 'L' ? 'Côté gauche' : side === 'R' ? 'Côté droit' : 'Ligne médiane';
+    infoBody.innerHTML = `
+      <div class="meta-row">
+        <span class="meta"><span class="k">Canal</span><span class="v">${meridian.name}</span></span>
+        <span class="meta"><span class="k">Organe</span><span class="v">${meridian.organ}</span></span>
+        <span class="meta"><span class="k">Côté</span><span class="v">${sideLabel}</span></span>
+      </div>
+      <div class="section-label">Indications principales</div>
+      <p>${point.info}</p>
+      <div class="section-label">Autres points du canal ${meridian.id}</div>
+      <div class="point-list">
+        ${meridian.points.filter((p) => p.id !== point.id).map((p) => `<button class="point-chip" data-point="${p.id}"><span class="code">${p.id}</span>${p.name}</button>`).join('')}
+      </div>
+      <p class="disclaimer">${DISCLAIMER}</p>
+    `;
+    infoBody.querySelectorAll('.point-chip').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const p = meridian.points.find((pt) => pt.id === btn.dataset.point);
+        showPointInfo(meridian, p, side);
+        focusOnPosition(p.pos);
+      });
+    });
+    requestAnimationFrame(() => updateSceneShift(true));
+  }
+
+  function hideInfoPanel() {
+    infoPanel.classList.remove('open');
+    selectedAcupoint = null;
+    updateSceneShift(false);
+  }
+
+  infoClose.addEventListener('click', () => {
+    hideInfoPanel();
+    selectedMeridianId = null;
+    highlightChip(null);
+    setAccent(null);
+  });
+
+  btnAll.addEventListener('click', () => {
+    selectedMeridianId = null;
+    highlightChip(null);
+    setAccent(null);
+    hideInfoPanel();
+  });
+
+  function focusOnPosition(pos) {
+    engine.camera.target = [0, pos[1], 0];
+  }
+
+  function setView(theta) {
+    engine.camera.theta = theta;
+    engine.camera.phi = 1.42;
+  }
+  btnFront.addEventListener('click', () => setView(0));
+  btnBack.addEventListener('click', () => setView(Math.PI));
+  btnReset.addEventListener('click', () => {
+    engine.camera.target = [0, 1.05, 0];
+    engine.camera.radius = 2.6;
+    engine.camera.theta = 0.25;
+    engine.camera.phi = 1.42;
+    selectedMeridianId = null;
+    highlightChip(null);
+    setAccent(null);
+    hideInfoPanel();
+  });
+
+  // ---- Recherche ----
+  const allPointsFlat = [];
+  MERIDIANS.forEach((m) => m.points.forEach((p) => allPointsFlat.push({ meridian: m, point: p })));
+
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    searchResults.innerHTML = '';
+    if (!q) { searchResults.classList.remove('open'); return; }
+    const matches = allPointsFlat.filter(({ point }) =>
+      point.id.toLowerCase().includes(q) || point.name.toLowerCase().includes(q) || point.trad.toLowerCase().includes(q)
+    ).slice(0, 12);
+    if (matches.length === 0) { searchResults.classList.remove('open'); return; }
+    searchResults.classList.add('open');
+    matches.forEach(({ meridian, point }) => {
+      const item = document.createElement('div');
+      item.className = 'search-item';
+      item.innerHTML = `<span class="dot" style="background:${meridian.color}"></span><span class="code">${point.id}</span> ${point.name} <small>${meridian.name}</small>`;
+      item.addEventListener('click', () => {
+        selectedMeridianId = meridian.id;
+        highlightChip(meridian.id);
+        showPointInfo(meridian, point, 'R');
+        focusOnPosition(point.pos);
+        searchResults.classList.remove('open');
+        searchInput.value = '';
+        searchInput.blur();
+      });
+      searchResults.appendChild(item);
+    });
+  });
+
+  // ---- Tap / clic : sélection d'un point d'acupression ----
+  let pointerDownInfo = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    pointerDownInfo = { x: e.clientX, y: e.clientY, t: Date.now() };
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (!pointerDownInfo) return;
+    const dx = e.clientX - pointerDownInfo.x;
+    const dy = e.clientY - pointerDownInfo.y;
+    const moved = Math.sqrt(dx * dx + dy * dy);
+    const dt = Date.now() - pointerDownInfo.t;
+    pointerDownInfo = null;
+    if (moved > 8 || dt > 500) return; // c'était un glissé, pas un tap
+
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const hitRadius = 20;
+    let best = null;
+    let bestDist = Infinity;
+    acupoints.forEach((ap) => {
+      if (!ap.screen) return;
+      const ddx = ap.screen.x - px;
+      const ddy = ap.screen.y - py;
+      const d2 = ddx * ddx + ddy * ddy;
+      if (d2 <= hitRadius * hitRadius && ap.screen.dist < bestDist) {
+        bestDist = ap.screen.dist;
+        best = ap;
+      }
+    });
+    if (best) {
+      selectedMeridianId = best.meridian.id;
+      highlightChip(best.meridian.id);
+      showPointInfo(best.meridian, best.point, best.side);
+    } else {
+      dismissHint();
+    }
+  });
+
+  // ---- Boucle de rendu ----
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const colorCache = new Map();
+  function rgba(hex, alpha) {
+    let rgb = colorCache.get(hex);
+    if (!rgb) { rgb = hexToRgb(hex); colorCache.set(hex, rgb); }
+    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
+  }
+
+  function render() {
+    const ctx = engine.ctx;
+    engine.camera.occludedBottom += (occludedTarget.bottom - engine.camera.occludedBottom) * 0.16;
+    engine.camera.occludedRight += (occludedTarget.right - engine.camera.occludedRight) * 0.16;
+    const basis = engine.getBasis();
+    const w = engine.width, h = engine.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Fond dégradé
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#101c30');
+    grad.addColorStop(1, '#070c17');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    const drawList = [];
+
+    // Sol (cercle au niveau des pieds)
+    const groundPts = [];
+    const groundN = 40;
+    for (let i = 0; i < groundN; i++) {
+      const a = (i / groundN) * Math.PI * 2;
+      const p = engine.project([Math.cos(a) * 0.9, 0, Math.sin(a) * 0.9], basis);
+      if (p) groundPts.push(p);
+    }
+    if (groundPts.length === groundN) {
+      const avgDist = groundPts.reduce((s, p) => s + p.dist, 0) / groundN;
+      drawList.push({
+        dist: avgDist + 3,
+        draw: () => {
+          ctx.beginPath();
+          groundPts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(30,50,80,0.35)';
+          ctx.fill();
+        },
+      });
+    }
+
+    // Corps (chaîne de sphères légèrement gonflées + ombrage radial pour lisser les jointures)
+    bodyParts.forEach((part) => {
+      const p = engine.project(part.pos, basis);
+      if (!p) return;
+      const r = Math.max(0.6, part.radius * p.scale * 1.28);
+      drawList.push({
+        dist: p.dist,
+        draw: () => {
+          const lightX = p.x - r * 0.35, lightY = p.y - r * 0.4;
+          const grad = ctx.createRadialGradient(lightX, lightY, r * 0.1, p.x, p.y, r * 1.05);
+          grad.addColorStop(0, rgba('#f3ddc2', 0.95));
+          grad.addColorStop(0.6, rgba(part.color, 0.92));
+          grad.addColorStop(1, rgba('#c9a684', 0.85));
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
+        },
+      });
+    });
+
+    // Organes (discrets par défaut, mis en évidence quand leur méridien est sélectionné)
+    organParts.forEach((part) => {
+      const active = isOrganActive(part.organKey);
+      if (active === false) return; // masqué si un autre méridien est sélectionné
+      const p = engine.project(part.pos, basis);
+      if (!p) return;
+      const r = Math.max(0.5, part.radius * p.scale);
+      const alpha = active ? Math.min(part.alpha + 0.4, 0.9) : part.alpha * 0.15;
+      drawList.push({
+        dist: p.dist - 0.001, // légèrement devant la peau au même point
+        draw: () => {
+          if (active) { ctx.save(); ctx.shadowColor = part.color; ctx.shadowBlur = 14; }
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = rgba(part.color, alpha);
+          ctx.fill();
+          if (active) {
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = rgba(part.color, 0.9);
+            ctx.stroke();
+            ctx.restore();
+          }
+        },
+      });
+    });
+
+    // Segments de méridiens
+    meridianSegments.forEach((seg) => {
+      const isSelectedOne = selectedMeridianId === seg.meridianId;
+      const neutral = !selectedMeridianId;
+      const opacity = isSelectedOne ? 0.95 : neutral ? 0.4 : 0.06;
+      const width = isSelectedOne ? 2.6 : neutral ? 1.3 : 1;
+      const pa = engine.project(seg.a, basis);
+      const pb = engine.project(seg.b, basis);
+      if (!pa || !pb) return;
+      const dist = (pa.dist + pb.dist) / 2;
+      drawList.push({
+        dist,
+        draw: () => {
+          ctx.beginPath();
+          ctx.moveTo(pa.x, pa.y);
+          ctx.lineTo(pb.x, pb.y);
+          ctx.strokeStyle = rgba(seg.color, opacity);
+          ctx.lineWidth = width;
+          ctx.stroke();
+        },
+      });
+    });
+
+    // Points d'acupression
+    const t = performance.now() * 0.002;
+    acupoints.forEach((ap) => {
+      const p = engine.project(ap.pos, basis);
+      ap.screen = p;
+      if (!p) return;
+      const active = isMeridianActive(ap.meridian.id);
+      const isSelected = selectedAcupoint && selectedAcupoint.point.id === ap.point.id && selectedAcupoint.side === ap.side;
+      const baseR = Math.max(active ? 4.5 : 1.8, 0.012 * p.scale * (active ? 1 : 0.5));
+      const pulse = active ? (0.5 + Math.sin(t * 2.2 + ap.pos[1] * 5) * 0.15) : 0;
+      const opacity = active ? Math.min(1, 0.5 + pulse) : 0.22;
+      drawList.push({
+        dist: p.dist - 0.002,
+        draw: () => {
+          if (active) {
+            ctx.save();
+            ctx.shadowColor = ap.color;
+            ctx.shadowBlur = isSelected ? 16 : 8;
+          }
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, isSelected ? baseR * 1.6 : baseR, 0, Math.PI * 2);
+          ctx.fillStyle = rgba(ap.color, opacity);
+          ctx.fill();
+          if (isSelected) {
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+          }
+          if (active) ctx.restore();
+        },
+      });
+    });
+
+    drawList.sort((a, b) => b.dist - a.dist);
+    drawList.forEach((item) => item.draw());
+
+    requestAnimationFrame(render);
+  }
+
+  window.addEventListener('resize', () => updateSceneShift(infoPanel.classList.contains('open')));
+
+  if (loadingEl) loadingEl.remove();
+  requestAnimationFrame(render);
+})();
+
+</script>
