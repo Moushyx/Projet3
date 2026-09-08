@@ -75,18 +75,34 @@
     const info = PLATE_POINTS[pointId];
     if (!info || !PLATES_INFO[info.planche]) return '';
     const plate = PLATES_INFO[info.planche];
+    // Une planche du tronc porte soixante-quinze points. Les afficher tous
+    // donne un essaim où l'on ne distingue plus rien. Une planche d'atlas ne
+    // montre que le canal traité et ce qui l'entoure de près : on garde donc
+    // les points du même canal, plus tout ce qui se trouve à moins de six
+    // centimètres — c'est ce voisinage-là qui sert à se repérer.
+    const canal = (id) => { const f = chercherPoint(id); return f ? f.meridian.id : ''; };
+    const monCanal = canal(pointId);
+    const pxm = plate.pxParMetre || 2000;
+    const proche = 0.06 * pxm;
     const voisins = Object.entries(PLATE_POINTS)
-      .filter(([, a]) => a.planche === info.planche)
+      .filter(([id, a]) => {
+        if (a.planche !== info.planche) return false;
+        if (id === pointId) return true;
+        if (canal(id) === monCanal) return true;
+        return Math.hypot(a.x - info.x, a.y - info.y) < proche;
+      })
       .map(([id, a]) => ({ id, x: a.x, y: a.y }));
     const data = {
       planche: info.planche,
       src: plateSrc(info.planche),
-      w: plate.w, h: plate.h,
+      w: plate.w, h: plate.h, pxm: pxm,
       cx: info.x, cy: info.y,
       cotes: info.cotes || [],
       miroir: side === 'L',
       points: voisins,
       actif: pointId,
+      canal: monCanal,
+      couleur: (chercherPoint(pointId) || { meridian: {} }).meridian.color || '#b4453c',
       muet: !!(opts && opts.muet),
     };
     return `
@@ -97,11 +113,17 @@
             <button class="zone-btn" data-zoom="out" type="button" aria-label="Réduire">–</button>
             <button class="zone-btn" data-zoom="in" type="button" aria-label="Agrandir">+</button>
             <button class="zone-btn" data-zoom="fit" type="button" aria-label="Voir la planche entière">⤢</button>
+            <button class="zone-btn" data-zoom="plein" type="button" aria-label="Plein écran">⛶</button>
           </span>
         </div>
         <div class="zone-view">
           <img class="zone-img" alt="${plate.nom}" src="${data.src}" draggable="false" />
           <svg class="zone-svg" aria-hidden="true"></svg>
+          <div class="zone-loc" aria-hidden="true">
+            <img class="zone-loc-img" src="${data.src}" draggable="false" />
+            <span class="zone-loc-pt"></span>
+            <span class="zone-loc-cadre"></span>
+          </div>
         </div>
         <div class="zone-pied">Point en rouge, voisins en gris. Les cotes sont en cun.</div>
       </div>`;
@@ -109,9 +131,22 @@
 
   const zoneEtat = new WeakMap();
 
-  function zoneFit(el, d, vw, vh) {
+  // Cadrage entier de la planche.
+  function zoneFit(d, vw, vh) {
     const k = Math.min(vw / d.w, vh / d.h) * 0.96;
     return { k, tx: (vw - d.w * k) / 2, ty: (vh - d.h * k) / 2 };
+  }
+
+  // Cadrage d'ouverture : une fenêtre de vingt-cinq centimètres de corps,
+  // centrée sur le point — assez large pour reconnaître la région, assez
+  // serrée pour lire. Si la planche entière tient dans moins que cela, on la
+  // montre entière.
+  const FENETRE_M = 0.25;
+  function zoneDepart(d, vw, vh) {
+    const fit = zoneFit(d, vw, vh);
+    const k = Math.max(fit.k, vh / (FENETRE_M * d.pxm));
+    if (k <= fit.k * 1.001) return fit;
+    return { k, tx: vw / 2 - (d.miroir ? d.w - d.cx : d.cx) * k, ty: vh / 2 - d.cy * k };
   }
 
   function layoutZone(root) {
@@ -125,7 +160,17 @@
     if (!vw || !vh) return;
 
     let st = zoneEtat.get(el);
-    if (!st) { st = zoneFit(el, d, vw, vh); st.base = st.k; zoneEtat.set(el, st); }
+    // Un changement de taille franc — passage en plein écran, rotation — refait
+    // le cadrage. Une variation légère, comme la barre d'adresse qui se replie,
+    // ne doit pas défaire l'agrandissement en cours.
+    if (st && (Math.abs(st.vh - vh) > st.vh * 0.3 || Math.abs(st.vw - vw) > st.vw * 0.3)) st = null;
+    if (st) { st.vw = vw; st.vh = vh; st.base = zoneFit(d, vw, vh).k; }
+    if (!st) {
+      st = zoneDepart(d, vw, vh);
+      st.base = zoneFit(d, vw, vh).k;
+      st.vw = vw; st.vh = vh;
+      zoneEtat.set(el, st);
+    }
     // Bornes : la planche reste dans le cadre. Quand elle y tient tout entière,
     // elle est centrée ; sinon on l'empêche seulement de sortir.
     const cw = d.w * st.k, ch = d.h * st.k;
@@ -145,6 +190,46 @@
     // ---- Repères, dessinés en pixels d'écran : ils gardent leur taille quel
     // que soit l'agrandissement, comme sur une planche imprimée.
     const parts = [];
+    // Le trajet du canal, d'abord : c'est le fond de la planche. Les points s'y
+    // posent, la mesure s'y rapporte.
+    const trajets = (typeof PLATE_PATHS !== 'undefined' && PLATE_PATHS[d.planche]) || {};
+    Object.entries(trajets).forEach(([mid, pieces]) => {
+      const actif = mid === d.canal;
+      pieces.forEach((pl) => {
+        let dd = '';
+        for (let i = 0; i < pl.length; i += 2) {
+          const x = X(pl[i]), y = Y(pl[i + 1]);
+          if (x < -60 || y < -60 || x > vw + 60 || y > vh + 60) { dd += ''; }
+          dd += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1);
+        }
+        parts.push(`<path class="canal${actif ? ' actif' : ''}" d="${dd}"${actif ? ` style="stroke:${d.couleur}"` : ''}/>`);
+      });
+    });
+
+    // Placement des étiquettes : chacune essaie d'abord sa position naturelle,
+    // puis les autres côtés du repère. Si aucune ne tient sans recouvrir une
+    // étiquette déjà posée, on ne l'écrit pas — un nom illisible parce qu'il
+    // en croise un autre ne renseigne personne.
+    const boites = [];
+    function poser(txt, cands, cls) {
+      const larg = String(txt).length * 6.8 + 4;
+      for (let i = 0; i < cands.length; i++) {
+        const [cx, cy, anc] = cands[i];
+        const x0 = anc === 'end' ? cx - larg : anc === 'middle' ? cx - larg / 2 : cx;
+        const r = { x0, y0: cy - 11, x1: x0 + larg, y1: cy + 3 };
+        const gene = boites.some((b) => !(r.x1 < b.x0 || r.x0 > b.x1 || r.y1 < b.y0 || r.y0 > b.y1));
+        if (!gene || i === cands.length - 1) {
+          if (gene) return '';
+          boites.push(r);
+          return `<text class="${cls}" x="${cx}" y="${cy}" text-anchor="${anc}">${txt}</text>`;
+        }
+      }
+      return '';
+    }
+    // Le nom du point cherché passe avant tout le monde.
+    const AX = X(d.cx), AY = Y(d.cy);
+    const etiquetteActive = d.muet ? '' : poser(d.actif, [[AX + 12, AY + 6, 'start']], 'pt-actif-txt');
+
     // Les étiquettes sont empilées à part et dessinées en dernier : sinon une
     // pastille voisine vient s'asseoir sur le chiffre de la mesure.
     const etiquettes = [];
@@ -152,7 +237,7 @@
       const ax = X(c.ax), ay = Y(c.ay);
       if (c.bx === undefined) {
         parts.push(`<circle class="cote-pt" cx="${ax}" cy="${ay}" r="3"/>`);
-        etiquettes.push(`<text class="cote-txt" x="${ax + 9}" y="${ay + 4}">${c.texte}</text>`);
+        etiquettes.push(poser(c.texte, [[ax + 9, ay + 4, 'start'], [ax - 9, ay + 4, 'end'], [ax, ay - 10, 'middle']], 'cote-txt'));
         return;
       }
       const bx = X(c.bx), by = Y(c.by);
@@ -177,32 +262,63 @@
         // Le nom du repère se met dans le prolongement de la cote, au-delà de
         // son origine : il ne peut alors croiser ni la mesure ni le point.
         const dx2 = -(bx - ax) / len, dy2 = -(by - ay) / len;
-        etiquettes.push(`<text class="cote-src" x="${ax + dx2 * 12}" y="${ay + dy2 * 12 + 4}" text-anchor="${dx2 < -0.3 ? 'end' : dx2 > 0.3 ? 'start' : 'middle'}">${c.depart}</text>`);
+        const anc = dx2 < -0.3 ? 'end' : dx2 > 0.3 ? 'start' : 'middle';
+        etiquettes.push(poser(c.depart, [[ax + dx2 * 12, ay + dy2 * 12 + 4, anc],
+          [ax + dx2 * 22, ay + dy2 * 22 + 4, anc]], 'cote-src'));
       }
     });
 
     // Les voisins restent muets tant qu'on n'a pas agrandi : sur un visage, une
     // dizaine d'étiquettes se recouvrent et cachent ce qu'elles désignent.
     // Comme sur une planche d'atlas, seul le point cherché est nommé.
-    const nomme = st.k > st.base * 1.7;
+    const nomme = d.points.length <= 16 || st.k > st.base * 1.5;
     d.points.forEach((pt) => {
       if (pt.id === d.actif) return;
       const x = X(pt.x), y = Y(pt.y);
       if (x < -20 || y < -20 || x > vw + 20 || y > vh + 20) return;
       parts.push(`<circle class="pt-hit" data-pt="${pt.id}" cx="${x}" cy="${y}" r="13"/>`);
       parts.push(`<circle class="pt" cx="${x}" cy="${y}" r="4.5"/>`);
-      if (nomme) etiquettes.push(`<text class="pt-txt" x="${x + 8}" y="${y + 4}">${pt.id}</text>`);
+      if (nomme) etiquettes.push(poser(pt.id, [[x + 8, y + 4, 'start'], [x - 8, y + 4, 'end'],
+        [x, y - 9, 'middle'], [x, y + 16, 'middle']], 'pt-txt'));
     });
 
-    const ax = X(d.cx), ay = Y(d.cy);
-    parts.push(`<circle class="pt-actif-halo" cx="${ax}" cy="${ay}" r="13"/>`);
-    parts.push(`<circle class="pt-actif" cx="${ax}" cy="${ay}" r="6.5"/>`);
-    if (!d.muet) etiquettes.push(`<text class="pt-actif-txt" x="${ax + 12}" y="${ay + 6}">${d.actif}</text>`);
+    parts.push(`<circle class="pt-actif-halo" cx="${AX}" cy="${AY}" r="13"/>`);
+    parts.push(`<circle class="pt-actif" cx="${AX}" cy="${AY}" r="6.5"/>`);
+    etiquettes.push(etiquetteActive);
 
     svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
     svg.setAttribute('width', vw);
     svg.setAttribute('height', vh);
     svg.innerHTML = parts.concat(etiquettes).join('');
+
+    // ---- Repère de situation ----
+    // La planche entière en miniature, avec le point et le rectangle de ce
+    // qu'on regarde. C'est ce qui manquait : agrandir sans savoir où l'on est
+    // revient à regarder la peau au microscope.
+    const loc = el.querySelector('.zone-loc');
+    if (loc) {
+      const lh = loc.clientHeight || 92;
+      const kl = lh / d.h;
+      const lw = d.w * kl;
+      loc.style.width = lw + 'px';
+      const limg = loc.querySelector('.zone-loc-img');
+      limg.style.width = lw + 'px';
+      limg.style.height = lh + 'px';
+      const lx = (x) => (d.miroir ? d.w - x : x) * kl;
+      const pt = loc.querySelector('.zone-loc-pt');
+      pt.style.left = lx(d.cx) + 'px';
+      pt.style.top = d.cy * kl + 'px';
+      // Rectangle : la portion de planche visible dans le cadre.
+      const cadre = loc.querySelector('.zone-loc-cadre');
+      const vx0 = -st.tx / st.k, vy0 = -st.ty / st.k;
+      const vw0 = vw / st.k, vh0 = vh / st.k;
+      const rx = d.miroir ? d.w - (vx0 + vw0) : vx0;
+      cadre.style.left = Math.max(0, rx * kl) + 'px';
+      cadre.style.top = Math.max(0, vy0 * kl) + 'px';
+      cadre.style.width = Math.min(lw, vw0 * kl) + 'px';
+      cadre.style.height = Math.min(lh, vh0 * kl) + 'px';
+      loc.classList.toggle('inutile', vw0 >= d.w && vh0 >= d.h);
+    }
   }
 
   function wireZone(root) {
@@ -218,7 +334,7 @@
       const vw = view.clientWidth, vh = view.clientHeight;
       const px = cx === undefined ? vw / 2 : cx;
       const py = cy === undefined ? vh / 2 : cy;
-      const k2 = Math.max(st.base * 0.9, Math.min(st.base * 6, st.k * fact));
+      const k2 = Math.max(st.base * 0.9, Math.min(st.base * 4, st.k * fact));
       // On agrandit autour du doigt : le pixel visé ne bouge pas.
       st.tx = px - (px - st.tx) * (k2 / st.k);
       st.ty = py - (py - st.ty) * (k2 / st.k);
@@ -230,9 +346,19 @@
       b.addEventListener('click', (e) => {
         e.stopPropagation();
         const mode = b.dataset.zoom;
+        if (mode === 'plein') {
+          // Plein écran : sur un téléphone, c'est la seule façon de regarder
+          // une planche de près sans perdre de vue ce qui l'entoure.
+          el.classList.toggle('plein');
+          b.textContent = el.classList.contains('plein') ? '✕' : '⛶';
+          document.body.classList.toggle('planche-plein', el.classList.contains('plein'));
+          zoneEtat.delete(el);
+          requestAnimationFrame(() => layoutZone(root));
+          return;
+        }
         if (mode === 'fit') {
-          zoneEtat.set(el, Object.assign(zoneFit(el, d, view.clientWidth, view.clientHeight),
-            { base: zoneFit(el, d, view.clientWidth, view.clientHeight).k }));
+          const f = zoneFit(d, view.clientWidth, view.clientHeight);
+          zoneEtat.set(el, Object.assign(f, { base: f.k }));
           layoutZone(root);
         } else zoomer(mode === 'in' ? 1.5 : 1 / 1.5);
       });
@@ -263,7 +389,7 @@
         const cx = (now[0].x + now[1].x) / 2, cy = (now[0].y + now[1].y) / 2;
         if (lastD) {
           const st2 = zoneEtat.get(el);
-          const k2 = Math.max(st2.base * 0.9, Math.min(st2.base * 6, st2.k * (dist / lastD)));
+          const k2 = Math.max(st2.base * 0.9, Math.min(st2.base * 4, st2.k * (dist / lastD)));
           st2.tx = cx - (cx - st2.tx) * (k2 / st2.k) + (lastC ? cx - lastC.x : 0);
           st2.ty = cy - (cy - st2.ty) * (k2 / st2.k) + (lastC ? cy - lastC.y : 0);
           st2.k = k2;
@@ -310,7 +436,16 @@
     if (img.complete) layoutZone(root);
     else img.addEventListener('load', () => layoutZone(root));
     requestAnimationFrame(() => layoutZone(root));
-    window.addEventListener('resize', () => layoutZone(root));
+    // Le cadre change de taille en plein écran, à la rotation, quand la barre
+    // d'adresse se replie. Un rendez-vous unique après le clic ne suffit pas :
+    // la mise en page n'est pas encore faite et la planche restait dessinée
+    // aux dimensions de la lucarne.
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => layoutZone(root));
+      ro.observe(view);
+    } else {
+      window.addEventListener('resize', () => layoutZone(root));
+    }
   }
 
   // Retrouve un point par son code, quel que soit son canal.
@@ -911,7 +1046,7 @@
       // Sans canal choisi, les trois cent soixante et un points sont visibles :
       // à la taille qu'ils ont dans un canal isolé, ils couvriraient le corps.
       const neutre = !selectedMeridianId && !focusPoints;
-      const rBase = isSelected || enAvant ? 0.016 : neutre ? 0.0072 : active ? 0.0105 : 0.006;
+      const rBase = isSelected || enAvant ? 0.014 : neutre ? 0.0065 : active ? 0.0085 : 0.005;
       pointDraws.push({
         pos: ap.pos,
         color: ap.color,

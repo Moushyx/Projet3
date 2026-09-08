@@ -176,7 +176,7 @@ header {
   padding: 15px 16px calc(18px + env(safe-area-inset-bottom));
   transform: translateY(105%);
   transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
-  max-height: 56vh; overflow-y: auto;
+  max-height: 72vh; overflow-y: auto;
   box-shadow: 0 -10px 34px rgba(0,0,0,0.6);
 }
 #info-panel.open { transform: translateY(0); }
@@ -420,3 +420,54 @@ header {
 .quiz-choix .point-chip.juste { opacity: 1; border-color: #4ec07b; background: rgba(78,192,123,0.12); }
 .quiz-choix .point-chip.faux { opacity: 1; border-color: #d9534f; background: rgba(217,83,79,0.12); }
 .quiz-verdict { margin-top: 10px; }
+
+/* ---------- Repère de situation sur la planche ---------- */
+.zone-loc {
+  position: absolute; right: 8px; bottom: 8px;
+  height: 92px;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid #c9ccd2;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.zone-loc.inutile { opacity: 0; }
+.zone-loc-img { position: absolute; top: 0; left: 0; opacity: 0.75; }
+.zone-loc-pt {
+  position: absolute; width: 5px; height: 5px; border-radius: 50%;
+  background: #d92d20; transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1.5px rgba(255,255,255,0.9);
+}
+.zone-loc-cadre {
+  position: absolute;
+  border: 1.5px solid #1f4ed8;
+  background: rgba(31,78,216,0.10);
+  border-radius: 2px;
+}
+@media (min-width: 760px) { .zone-loc { height: 116px; } }
+
+/* ---------- Planche en plein écran ---------- */
+/* Sur un téléphone, la fiche laisse une lucarne de trois cents pixels. Pour
+   regarder une planche de près, il faut tout l'écran. */
+.zone.plein {
+  position: fixed; inset: 0; z-index: 60;
+  margin: 0; border: none; border-radius: 0;
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.zone.plein .zone-view { flex: 1; height: auto; }
+.zone.plein .zone-loc { height: 132px; }
+body.planche-plein #info-panel { overflow: hidden; }
+
+/* Un élément transformé sert de référence aux positions fixes de ses
+   descendants : tant que la fiche garde son translate, la planche en plein
+   écran se cadre sur la fiche et non sur l'écran. */
+body.planche-plein #info-panel { transform: none; }
+
+/* Trajets des canaux sur la planche : le canal traité en couleur, les autres
+   en gris très clair, comme les lignes de fond d'une planche d'atlas. */
+.zone-svg .canal { fill: none; stroke: #d3d7dd; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.zone-svg .canal.actif { stroke-width: 3.5; opacity: 0.75; }

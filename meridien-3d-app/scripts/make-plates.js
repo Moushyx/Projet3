@@ -17,7 +17,7 @@ const zlib = require('zlib');
 const ROOT = path.join(__dirname, '..');
 global.V3 = require(path.join(ROOT, 'js', 'vec3.js')).V3;
 const { parseBodyModel } = require(path.join(ROOT, 'js', 'model.js'));
-const { POINTS_3D, POINT_COTES } = require(path.join(ROOT, 'js', 'points-3d.js'));
+const { POINTS_3D, POINT_COTES, MERIDIAN_PATHS } = require(path.join(ROOT, 'js', 'points-3d.js'));
 const { MERIDIANS } = require(path.join(ROOT, 'js', 'data.js'));
 const { POINT_RULES } = require('./point-rules.js');
 const { CATALOGUE } = require(path.join(ROOT, 'js', 'catalogue.js'));
@@ -497,11 +497,47 @@ function traceVisage(img, plate, frame) {
 const outDir = path.join(ROOT, 'assets', 'planches');
 if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
+// ---------- Trajets des canaux sur les planches ----------
+// Une planche d'acupuncture montre la ligne du canal, pas seulement ses points.
+// Sans elle, le ventre — lisse sur ce maillage — n'offre rien à lire dès qu'on
+// s'approche : quelques pastilles sur du blanc.
+//
+// On projette le trajet et on ne garde que ce qui est réellement visible : le
+// tampon de profondeur de la planche dit si le point du trajet est sur la face
+// qu'on regarde ou de l'autre côté du corps.
+const platePaths = {};
+function tracerTrajets(pl, r) {
+  const { frame, depth, w, h } = r;
+  const parPlanche = {};
+  Object.entries(MERIDIAN_PATHS).forEach(([mid, pieces]) => {
+    const sorties = [];
+    pieces.forEach((piece) => {
+      let courant = [];
+      piece.forEach((p) => {
+        const pr = project(frame, p);
+        const x = Math.round(pr.x), y = Math.round(pr.y);
+        let visible = x >= 0 && y >= 0 && x < w && y < h;
+        if (visible) {
+          const d = depth[y * w + x];
+          visible = isFinite(d) && pr.depth - d < 0.022;
+        }
+        if (visible) courant.push(Math.round(pr.x * 10) / 10, Math.round(pr.y * 10) / 10);
+        else if (courant.length >= 4) { sorties.push(courant); courant = []; }
+        else courant = [];
+      });
+      if (courant.length >= 4) sorties.push(courant);
+    });
+    if (sorties.length) parPlanche[mid] = sorties;
+  });
+  platePaths[pl.id] = parPlanche;
+}
+
 const manifest = {};
 let total = 0;
 PLATES.forEach((pl) => {
   const t0 = Date.now();
   const r = renderPlate(pl);
+  tracerTrajets(pl, r);
   const png = toPNG(r, pl);
   fs.writeFileSync(path.join(outDir, pl.id + '.png'), png);
   total += png.length;
@@ -520,6 +556,9 @@ const PLATES_INFO = ${JSON.stringify(manifest)};
 
 const PLATE_POINTS = ${JSON.stringify(points)};
 
-if (typeof module !== 'undefined') module.exports = { PLATES_INFO, PLATE_POINTS };
+// Trajets projetés, par planche puis par canal : suites de x, y en pixels.
+const PLATE_PATHS = ${JSON.stringify(platePaths)};
+
+if (typeof module !== 'undefined') module.exports = { PLATES_INFO, PLATE_POINTS, PLATE_PATHS };
 `);
 console.log('écrit js/plates.js');
