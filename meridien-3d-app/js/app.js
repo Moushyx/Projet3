@@ -42,8 +42,16 @@
   const engine = createEngine(canvas);
 
   // ---- Géométrie statique du corps et des organes ----
-  const bodyParts = buildBodyGeometry();
+  const bodyMesh = buildHumanMesh();
   const organParts = buildOrganGeometry(ORGAN_SHAPES);
+
+  // Tampons de projection réutilisés d'une image à l'autre (évite de créer
+  // des milliers d'objets par seconde).
+  const vertexCount = bodyMesh.positions.length / 3;
+  const projX = new Float32Array(vertexCount);
+  const projY = new Float32Array(vertexCount);
+  const projDist = new Float32Array(vertexCount);
+  const partDepth = new Float32Array(bodyMesh.parts.length);
 
   // ---- Méridiens : segments de ligne + points d'acupression ----
   const meridianSegments = []; // { a, b, color, meridianId }
@@ -336,49 +344,74 @@
       });
     }
 
-    // Corps (chaîne de sphères légèrement gonflées + ombrage radial pour lisser les jointures)
-    bodyParts.forEach((part) => {
-      const p = engine.project(part.pos, basis);
-      if (!p) return;
-      const r = Math.max(0.6, part.radius * p.scale * 1.28);
+    // Corps : maillage anatomique. On projette d'abord tous les sommets,
+    // puis on écarte les facettes tournées vers l'arrière (invisibles).
+    const pos = bodyMesh.positions;
+    for (let i = 0; i < vertexCount; i++) {
+      const pr = engine.project([pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]], basis);
+      if (pr) { projX[i] = pr.x; projY[i] = pr.y; projDist[i] = pr.dist; }
+      else { projDist[i] = -1; }
+    }
+    const camPos = basis.camPos;
+    for (let i = 0; i < bodyMesh.parts.length; i++) {
+      const ctr = bodyMesh.parts[i].centroid;
+      const pr = engine.project(ctr, basis);
+      partDepth[i] = pr ? pr.dist : 1e6;
+    }
+    for (let f = 0; f < bodyMesh.faces.length; f++) {
+      const face = bodyMesh.faces[f];
+      const c = face.center, n = face.n;
+      // Facette cachée : sa normale s'éloigne de la caméra
+      if (n[0] * (c[0] - camPos[0]) + n[1] * (c[1] - camPos[1]) + n[2] * (c[2] - camPos[2]) >= 0) continue;
+      const da = projDist[face.a], db = projDist[face.b], dc = projDist[face.c], dd = projDist[face.d];
+      if (da < 0 || db < 0 || dc < 0 || dd < 0) continue;
+      const ax = projX[face.a], ay = projY[face.a];
+      const bx = projX[face.b], by = projY[face.b];
+      const cx = projX[face.c], cy = projY[face.c];
+      const dx = projX[face.d], dy = projY[face.d];
+      const color = face.color;
       drawList.push({
-        dist: p.dist,
+        key: partDepth[face.part],
+        dist: (da + db + dc + dd) * 0.25,
         draw: () => {
-          const lightX = p.x - r * 0.35, lightY = p.y - r * 0.4;
-          const grad = ctx.createRadialGradient(lightX, lightY, r * 0.1, p.x, p.y, r * 1.05);
-          grad.addColorStop(0, rgba('#f3ddc2', 0.95));
-          grad.addColorStop(0.6, rgba(part.color, 0.92));
-          grad.addColorStop(1, rgba('#c9a684', 0.85));
           ctx.beginPath();
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = grad;
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+          ctx.lineTo(cx, cy);
+          ctx.lineTo(dx, dy);
+          ctx.closePath();
+          ctx.fillStyle = color;
           ctx.fill();
+          // Le contour de même teinte comble les fissures d'anticrénelage
+          // entre facettes voisines.
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
         },
       });
-    });
+    }
 
-    // Organes (discrets par défaut, mis en évidence quand leur méridien est sélectionné)
+    // Organes : le corps est opaque, l'organe du canal sélectionné est donc
+    // dessiné par-dessus, en transparence, comme une vue en transparence.
     organParts.forEach((part) => {
-      const active = isOrganActive(part.organKey);
-      if (active === false) return; // masqué si un autre méridien est sélectionné
+      if (isOrganActive(part.organKey) !== true) return;
       const p = engine.project(part.pos, basis);
       if (!p) return;
       const r = Math.max(0.5, part.radius * p.scale);
-      const alpha = active ? Math.min(part.alpha + 0.4, 0.9) : part.alpha * 0.15;
       drawList.push({
-        dist: p.dist - 0.001, // légèrement devant la peau au même point
+        dist: -2, // toujours au-dessus du corps
         draw: () => {
-          if (active) { ctx.save(); ctx.shadowColor = part.color; ctx.shadowBlur = 14; }
+          ctx.save();
+          ctx.shadowColor = part.color;
+          ctx.shadowBlur = 16;
           ctx.beginPath();
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = rgba(part.color, alpha);
+          ctx.fillStyle = rgba(part.color, 0.42);
           ctx.fill();
-          if (active) {
-            ctx.lineWidth = 1.5;
-            ctx.strokeStyle = rgba(part.color, 0.9);
-            ctx.stroke();
-            ctx.restore();
-          }
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = rgba(part.color, 0.85);
+          ctx.stroke();
+          ctx.restore();
         },
       });
     });
@@ -392,7 +425,7 @@
       const pa = engine.project(seg.a, basis);
       const pb = engine.project(seg.b, basis);
       if (!pa || !pb) return;
-      const dist = (pa.dist + pb.dist) / 2;
+      const dist = (pa.dist + pb.dist) / 2 - 0.012;
       drawList.push({
         dist,
         draw: () => {
@@ -418,7 +451,7 @@
       const pulse = active ? (0.5 + Math.sin(t * 2.2 + ap.pos[1] * 5) * 0.15) : 0;
       const opacity = active ? Math.min(1, 0.5 + pulse) : 0.22;
       drawList.push({
-        dist: p.dist - 0.002,
+        dist: p.dist - 0.022,
         draw: () => {
           if (active) {
             ctx.save();
@@ -439,7 +472,12 @@
       });
     });
 
-    drawList.sort((a, b) => b.dist - a.dist);
+    // Tri du peintre : d'abord la clé de groupe (partie du corps pour le
+    // maillage, profondeur propre pour le reste), puis la profondeur exacte.
+    for (let i = 0; i < drawList.length; i++) {
+      if (drawList[i].key === undefined) drawList[i].key = drawList[i].dist;
+    }
+    drawList.sort((a, b) => (b.key - a.key) || (b.dist - a.dist));
     drawList.forEach((item) => item.draw());
 
     requestAnimationFrame(render);

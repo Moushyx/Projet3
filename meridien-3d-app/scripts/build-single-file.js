@@ -10,7 +10,7 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const FONTS = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500;600&family=Instrument+Sans:wght@400;500;600&display=swap';
 
 const css = read('css/style.css');
-const scripts = ['js/vec3.js', 'js/data.js', 'js/geometry.js', 'js/engine.js', 'js/app.js']
+const scripts = ['js/vec3.js', 'js/data.js', 'js/geometry.js', 'js/mesh.js', 'js/engine.js', 'js/app.js']
   .map((f) => `/* ===== ${f} ===== */\n${read(f)}`)
   .join('\n\n');
 

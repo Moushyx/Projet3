@@ -8,6 +8,7 @@ const ASSETS = [
   './js/vec3.js',
   './js/data.js',
   './js/geometry.js',
+  './js/mesh.js',
   './js/engine.js',
   './js/app.js',
   './icons/icon-180.png',

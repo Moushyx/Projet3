@@ -14,7 +14,7 @@ const MERIDIANS = [
     organ: 'Poumons', organKey: 'lungs',
     description: "Gouverne le Qi et la respiration, régule les liquides organiques et la peau. En lien avec le Gros Intestin.",
     points: [
-      { id: 'LU1', name: 'Zhongfu', trad: 'Palais Central', pos: [0.16, 1.36, 0.09], info: "Point Mu (alarme) du Poumon. Toux, oppression thoracique, asthme." },
+      { id: 'LU1', name: 'Zhongfu', trad: 'Palais Central', pos: [0.132, 1.368, 0.079], info: "Point Mu (alarme) du Poumon. Toux, oppression thoracique, asthme." },
       { id: 'LU5', name: 'Chize', trad: 'Marais du Coude', pos: [0.19, 1.13, 0.03], info: "Point He (mer). Toux, chaleur du Poumon, douleur du coude." },
       { id: 'LU6', name: 'Kongzui', trad: 'Trou du Milieu', pos: [0.205, 1.00, 0.03], info: "Point Xi (fissure). Hémoptysie, toux aiguë, asthme." },
       { id: 'LU7', name: 'Lieque', trad: 'Brèche Céleste', pos: [0.215, 0.905, 0.02], info: "Point clé du Vaisseau Ren. Rhume, cervicalgie, toux." },
@@ -46,7 +46,7 @@ const MERIDIANS = [
     points: [
       { id: 'ST1', name: 'Chengqi', trad: 'Récipient des Larmes', pos: [0.03, 1.655, 0.10], info: "Troubles oculaires, larmoiement." },
       { id: 'ST2', name: 'Sibai', trad: 'Blancheur des Quatre Directions', pos: [0.035, 1.63, 0.10], info: "Douleur faciale, sinusite." },
-      { id: 'ST6', name: 'Jiache', trad: 'Char de la Mâchoire', pos: [0.075, 1.575, 0.09], info: "Douleur mandibulaire, paralysie faciale." },
+      { id: 'ST6', name: 'Jiache', trad: 'Char de la Mâchoire', pos: [0.048, 1.585, 0.042], info: "Douleur mandibulaire, paralysie faciale." },
       { id: 'ST8', name: 'Touwei', trad: 'Lien de la Tête', pos: [0.09, 1.73, 0.06], info: "Céphalées frontales, vertige." },
       { id: 'ST25', name: 'Tianshu', trad: 'Pivot Céleste', pos: [0.09, 1.02, 0.10], info: "Point Mu du Gros Intestin. Diarrhée, constipation, troubles digestifs." },
       { id: 'ST36', name: 'Zusanli', trad: 'Trois Lieues de Jambe', pos: [0.10, 0.395, 0.045], info: "Point He (mer), tonification majeure. Digestion, immunité, fatigue." },
@@ -64,7 +64,7 @@ const MERIDIANS = [
       { id: 'SP1', name: 'Yinbai', trad: 'Blancheur Cachée', pos: [0.025, 0.01, 0.05], info: "Point Jing (puits). Saignements, troubles digestifs, anxiété." },
       { id: 'SP3', name: 'Taibai', trad: 'Suprême Blancheur', pos: [0.10, 0.045, 0.06], info: "Point Source. Fatigue, troubles digestifs." },
       { id: 'SP6', name: 'Sanyinjiao', trad: 'Réunion des Trois Yin', pos: [0.09, 0.235, 0.03], info: "Croisement des 3 méridiens Yin de jambe. Gynécologie, digestion, sommeil." },
-      { id: 'SP9', name: 'Yinlingquan', trad: 'Source du Tertre Yin', pos: [0.10, 0.45, 0.02], info: "Élimine l'humidité, œdèmes, troubles urinaires." },
+      { id: 'SP9', name: 'Yinlingquan', trad: 'Source du Tertre Yin', pos: [0.046, 0.452, 0.012], info: "Élimine l'humidité, œdèmes, troubles urinaires." },
       { id: 'SP10', name: 'Xuehai', trad: 'Mer du Sang', pos: [0.11, 0.52, 0.06], info: "Régule le Sang, troubles gynécologiques, peau." },
       { id: 'SP21', name: 'Dabao', trad: 'Grand Enveloppement', pos: [0.19, 1.28, -0.03], info: "Point Luo général de la Rate. Douleurs thoraciques diffuses." },
     ],
@@ -89,7 +89,7 @@ const MERIDIANS = [
     description: "Sépare le pur de l'impur dans la digestion. Lié au Cœur.",
     points: [
       { id: 'SI1', name: 'Shaoze', trad: 'Petit Marais', pos: [0.232, 0.665, -0.01], info: "Point Jing (puits). Lactation, mal de gorge." },
-      { id: 'SI3', name: 'Houxi', trad: 'Ruisseau Postérieur', pos: [0.235, 0.70, -0.02], info: "Point clé du Vaisseau Gouverneur. Raideur nuque/dos, fièvre." },
+      { id: 'SI3', name: 'Houxi', trad: 'Ruisseau Postérieur', pos: [0.276, 0.716, 0.006], info: "Point clé du Vaisseau Gouverneur. Raideur nuque/dos, fièvre." },
       { id: 'SI8', name: 'Xiaohai', trad: 'Petite Mer', pos: [0.20, 1.12, -0.03], info: "Point He (mer). Douleur du coude, névralgie du cubital." },
       { id: 'SI11', name: 'Tianzong', trad: 'Ancêtre Céleste', pos: [0.11, 1.37, -0.10], info: "Douleur scapulaire, épaule." },
       { id: 'SI18', name: 'Quanliao', trad: 'Os de la Pommette', pos: [0.06, 1.615, 0.09], info: "Douleur faciale, paralysie faciale." },
@@ -104,7 +104,7 @@ const MERIDIANS = [
     points: [
       { id: 'BL1', name: 'Jingming', trad: 'Brillance Oculaire', pos: [0.015, 1.655, 0.10], info: "Troubles oculaires de toutes sortes." },
       { id: 'BL2', name: 'Zanzhu', trad: 'Bambous Réunis', pos: [0.02, 1.675, 0.10], info: "Céphalées, troubles oculaires." },
-      { id: 'BL10', name: 'Tianzhu', trad: 'Pilier Céleste', pos: [0.02, 1.51, -0.09], info: "Cervicalgie, céphalées occipitales." },
+      { id: 'BL10', name: 'Tianzhu', trad: 'Pilier Céleste', pos: [0.024, 1.508, -0.048], info: "Cervicalgie, céphalées occipitales." },
       { id: 'BL13', name: 'Feishu', trad: 'Shu du Poumon', pos: [0.04, 1.365, -0.10], info: "Point Shu du dos du Poumon. Toux, asthme, affections respiratoires." },
       { id: 'BL15', name: 'Xinshu', trad: 'Shu du Cœur', pos: [0.04, 1.30, -0.10], info: "Point Shu du dos du Cœur. Anxiété, palpitations, insomnie." },
       { id: 'BL18', name: 'Ganshu', trad: 'Shu du Foie', pos: [0.04, 1.135, -0.09], info: "Point Shu du dos du Foie. Troubles hépatiques, yeux, colère." },
@@ -136,11 +136,11 @@ const MERIDIANS = [
     organ: 'Péricarde', organKey: 'pericardium',
     description: "Protège le Cœur, régule la circulation et les émotions ; impliqué dans la sexualité et le système circulatoire.",
     points: [
-      { id: 'PC3', name: 'Quze', trad: 'Marais du Coude', pos: [0.17, 1.115, 0.05], info: "Point He (mer). Douleur du coude, nausées, chaleur." },
+      { id: 'PC3', name: 'Quze', trad: 'Marais du Coude', pos: [0.216, 1.118, 0.044], info: "Point He (mer). Douleur du coude, nausées, chaleur." },
       { id: 'PC6', name: 'Neiguan', trad: 'Barrière Interne', pos: [0.20, 0.905, 0.02], info: "Point clé du Vaisseau Yin Wei. Nausées, anxiété, palpitations — point majeur." },
       { id: 'PC7', name: 'Daling', trad: 'Grand Monticule', pos: [0.205, 0.875, 0.02], info: "Point Source. Anxiété, douleur du poignet." },
       { id: 'PC8', name: 'Laogong', trad: 'Palais du Labeur', pos: [0.19, 0.72, 0.04], info: "Point Ying (source). Chaleur, anxiété, transpiration des mains." },
-      { id: 'PC9', name: 'Zhongchong', trad: 'Assaut du Milieu', pos: [0.20, 0.685, 0.03], info: "Point Jing (puits). Urgence, perte de conscience, fièvre." },
+      { id: 'PC9', name: 'Zhongchong', trad: 'Assaut du Milieu', pos: [0.248, 0.680, 0.022], info: "Point Jing (puits). Urgence, perte de conscience, fièvre." },
     ],
   },
   {
@@ -164,7 +164,7 @@ const MERIDIANS = [
     points: [
       { id: 'GB1', name: 'Tongziliao', trad: 'Faille de la Pupille', pos: [0.09, 1.655, 0.05], info: "Céphalées temporales, troubles oculaires." },
       { id: 'GB14', name: 'Yangbai', trad: 'Blancheur Yang', pos: [0.075, 1.72, 0.08], info: "Céphalées frontales, paralysie faciale." },
-      { id: 'GB20', name: 'Fengchi', trad: 'Étang du Vent', pos: [0.06, 1.545, -0.08], info: "Céphalées, cervicalgie, vertige, rhume — point très utilisé." },
+      { id: 'GB20', name: 'Fengchi', trad: 'Étang du Vent', pos: [0.042, 1.562, -0.058], info: "Céphalées, cervicalgie, vertige, rhume — point très utilisé." },
       { id: 'GB21', name: 'Jianjing', trad: 'Puits de l\'Épaule', pos: [0.11, 1.45, -0.03], info: "Tension d'épaule/nuque, lactation." },
       { id: 'GB30', name: 'Huantiao', trad: 'Bond du Bond', pos: [0.13, 0.83, -0.08], info: "Sciatique, douleur de hanche — point majeur du membre inférieur." },
       { id: 'GB34', name: 'Yanglingquan', trad: 'Source du Tertre Yang', pos: [0.135, 0.44, -0.01], info: "Point He (mer), point maître des tendons. Douleur des tendons/genou." },
@@ -198,7 +198,7 @@ const MERIDIANS = [
       { id: 'CV12', name: 'Zhongwan', trad: 'Milieu de l\'Épigastre', pos: [0, 1.12, 0.09], info: "Point Mu de l'Estomac. Digestion, douleur épigastrique." },
       { id: 'CV17', name: 'Danzhong', trad: 'Centre Thoracique', pos: [0, 1.31, 0.10], info: "Point Mu du Péricarde. Oppression thoracique, anxiété, lactation." },
       { id: 'CV22', name: 'Tiantu', trad: 'Cheminée Céleste', pos: [0, 1.485, 0.06], info: "Toux, asthme, boule dans la gorge." },
-      { id: 'CV24', name: 'Chengjiang', trad: 'Réceptacle des Fluides', pos: [0, 1.555, 0.10], info: "Paralysie faciale, douleur du menton." },
+      { id: 'CV24', name: 'Chengjiang', trad: 'Réceptacle des Fluides', pos: [0, 1.562, 0.047], info: "Paralysie faciale, douleur du menton." },
     ],
   },
   {
