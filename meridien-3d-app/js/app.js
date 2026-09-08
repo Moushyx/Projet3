@@ -35,6 +35,96 @@
       occludedTarget = { bottom: Math.min(infoPanel.offsetHeight, engine.height * 0.62), right: 0 };
     }
   }
+  // Source d'une planche : embarquée dans la page unique, sinon servie à côté.
+  function plateSrc(id) {
+    if (typeof EMBEDDED_PLATES === 'object' && EMBEDDED_PLATES[id]) return EMBEDDED_PLATES[id];
+    return 'assets/planches/' + id + '.png';
+  }
+
+  // Vue 2D de la zone : la planche anatomique correspondante, cadrée sur le
+  // point choisi, avec ses voisins repérés. Les planches viennent du même
+  // modèle que la vue 3D, donc les positions y sont exactes.
+  function buildZoneView(pointId, side) {
+    const info = PLATE_POINTS[pointId];
+    if (!info || !PLATES_INFO[info.planche]) return '';
+    const plate = PLATES_INFO[info.planche];
+    const voisins = Object.entries(PLATE_POINTS)
+      .filter(([, a]) => a.planche === info.planche)
+      .map(([id, a]) => ({ id, x: a.x, y: a.y }));
+    const data = {
+      planche: info.planche,
+      src: plateSrc(info.planche),
+      w: plate.w, h: plate.h, pxParMetre: plate.pxParMetre || 1500,
+      cx: info.x, cy: info.y,
+      miroir: side === 'L',
+      points: voisins,
+      actif: pointId,
+    };
+    return `
+      <div class="zone" data-zone='${JSON.stringify(data).replace(/'/g, '&#39;')}'>
+        <div class="zone-head">
+          <span class="zone-nom">${plate.nom}${side === 'L' ? ' · côté gauche' : ''}</span>
+          <button class="zone-toggle" type="button">Vue d'ensemble</button>
+        </div>
+        <div class="zone-view">
+          <img class="zone-img" alt="${plate.nom}" src="${data.src}" />
+          <div class="zone-marks"></div>
+        </div>
+      </div>`;
+  }
+
+  // Place l'image et les repères. Le zoom cadre soit le point, soit la planche
+  // entière ; les pastilles gardent leur taille, seule l'image est agrandie.
+  function layoutZone(root) {
+    const el = root.querySelector('.zone');
+    if (!el) return;
+    const d = JSON.parse(el.dataset.zone);
+    const view = el.querySelector('.zone-view');
+    const img = el.querySelector('.zone-img');
+    const marks = el.querySelector('.zone-marks');
+    const vw = view.clientWidth, vh = view.clientHeight;
+    if (!vw || !vh) return;
+
+    const ensemble = el.classList.contains('vue-ensemble');
+    // Cadrage sur une largeur réelle de 14 cm autour du point : à cette
+    // échelle le relief environnant reste reconnaissable, ce qui est le seul
+    // moyen de situer un point sur son repère anatomique.
+    const LARGEUR_M = 0.14;
+    const z = ensemble
+      ? Math.min(vw / d.w, vh / d.h)
+      : Math.max(0.6, Math.min(4, vw / (LARGEUR_M * d.pxParMetre)));
+    const fx = (x) => (d.miroir ? d.w - x : x);
+    const tx = ensemble ? (vw - d.w * z) / 2 : vw / 2 - fx(d.cx) * z;
+    const ty = ensemble ? (vh - d.h * z) / 2 : vh / 2 - d.cy * z;
+
+    img.style.width = d.w + 'px';
+    img.style.height = d.h + 'px';
+    img.style.transformOrigin = '0 0';
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${z})`;
+
+    marks.innerHTML = d.points.map((pt) => {
+      const x = tx + fx(pt.x) * z, y = ty + pt.y * z;
+      const actif = pt.id === d.actif;
+      return `<span class="zone-mark${actif ? ' actif' : ''}" style="left:${x}px;top:${y}px">
+        <i></i><b>${pt.id}</b></span>`;
+    }).join('');
+
+    el.querySelector('.zone-toggle').textContent = ensemble ? 'Centrer le point' : "Vue d'ensemble";
+  }
+
+  function wireZone(root) {
+    const el = root.querySelector('.zone');
+    if (!el) return;
+    el.querySelector('.zone-toggle').addEventListener('click', () => {
+      el.classList.toggle('vue-ensemble');
+      layoutZone(root);
+    });
+    const img = el.querySelector('.zone-img');
+    if (img.complete) layoutZone(root);
+    else img.addEventListener('load', () => layoutZone(root));
+    requestAnimationFrame(() => layoutZone(root));
+  }
+
   function dismissHint() {
     if (hintEl) hintEl.classList.add('hidden');
   }
@@ -209,6 +299,7 @@
         <span class="meta"><span class="k">Organe</span><span class="v">${meridian.organ}</span></span>
         <span class="meta"><span class="k">Côté</span><span class="v">${sideLabel}</span></span>
       </div>
+      ${buildZoneView(point.id, side)}
       <div class="section-label">Indications principales</div>
       <p>${point.info}</p>
       <div class="section-label">Autres points du canal ${meridian.id}</div>
@@ -224,6 +315,7 @@
         focusOnPosition(POINTS_3D[p.id] || p.pos);
       });
     });
+    wireZone(infoBody);
     requestAnimationFrame(() => updateSceneShift(true));
   }
 

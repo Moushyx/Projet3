@@ -260,3 +260,73 @@ header {
   #info-panel::before { display: none; }
   .viewer-controls { bottom: 104px; right: 376px; }
 }
+
+/* ---------- Vue 2D de la zone ---------- */
+/* La planche est une vue orthographique du même modèle que la scène 3D : les
+   repères y tombent donc exactement où ils doivent. */
+.zone {
+  margin: 2px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f4f2ee;
+}
+.zone-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px;
+  background: var(--ink-3);
+  border-bottom: 1px solid var(--line);
+}
+.zone-nom {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted);
+}
+.zone-toggle {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 8px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--ink-2); color: var(--muted);
+}
+.zone-toggle:active { color: var(--text); border-color: var(--accent); }
+
+.zone-view {
+  position: relative;
+  height: 230px;
+  overflow: hidden;
+  background: #f4f2ee;
+}
+.zone-img {
+  position: absolute; top: 0; left: 0;
+  image-rendering: auto;
+  user-select: none; -webkit-user-drag: none;
+}
+.zone-marks { position: absolute; inset: 0; pointer-events: none; }
+
+.zone-mark {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 4px;
+  white-space: nowrap;
+}
+.zone-mark i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #6b7280; border: 1.5px solid #f4f2ee;
+  flex: 0 0 auto;
+}
+.zone-mark b {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  color: #4b5563; background: rgba(244,242,238,0.82);
+  padding: 0 2px; border-radius: 3px;
+}
+.zone-mark.actif { z-index: 2; transform: translate(-50%, -50%) scale(1.35); }
+.zone-mark.actif i {
+  background: var(--accent);
+  border-color: #1b2536;
+  box-shadow: 0 0 0 3px rgba(217, 195, 165, 0.45);
+}
+.zone-mark.actif b { color: #111827; background: rgba(244,242,238,0.95); font-size: 10px; }
+
+@media (min-width: 760px) {
+  .zone-view { height: 280px; }
+}

@@ -14,11 +14,23 @@ const css = read('css/style.css');
 // Le modèle anatomique voyage avec la page, encodé en base64 : une page unique
 // ne peut pas aller chercher un fichier à côté d'elle.
 const modelB64 = fs.readFileSync(path.join(root, 'assets', 'body.bin')).toString('base64');
-const embedded = `/* ===== modèle anatomique embarqué ===== */\nconst EMBEDDED_BODY_MODEL = "${modelB64}";`;
+
+// Les planches anatomiques suivent le même chemin : une page unique ne peut
+// pas aller chercher d'images à côté d'elle.
+const planchesDir = path.join(root, 'assets', 'planches');
+const planches = {};
+fs.readdirSync(planchesDir).filter((f) => f.endsWith('.png')).forEach((f) => {
+  planches[f.replace('.png', '')] =
+    'data:image/png;base64,' + fs.readFileSync(path.join(planchesDir, f)).toString('base64');
+});
+
+const embedded = `/* ===== ressources embarquées ===== */
+const EMBEDDED_BODY_MODEL = "${modelB64}";
+const EMBEDDED_PLATES = ${JSON.stringify(planches)};`;
 
 const scripts = [embedded].concat(
-  ['js/vec3.js', 'js/data.js', 'js/points-3d.js', 'js/geometry.js', 'js/model.js',
-   'js/renderer-gl.js', 'js/engine.js', 'js/app.js']
+  ['js/vec3.js', 'js/data.js', 'js/points-3d.js', 'js/plates.js', 'js/geometry.js',
+   'js/model.js', 'js/renderer-gl.js', 'js/engine.js', 'js/app.js']
     .map((f) => `/* ===== ${f} ===== */\n${read(f)}`)
 ).join('\n\n');
 

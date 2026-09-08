@@ -1,5 +1,5 @@
 // Service worker minimal : mise en cache pour usage hors-ligne (PWA sur iPhone).
-const CACHE_NAME = 'meridiens-3d-v2';
+const CACHE_NAME = 'meridiens-3d-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   './js/vec3.js',
   './js/data.js',
   './js/points-3d.js',
+  './js/plates.js',
   './js/geometry.js',
   './js/model.js',
   './js/renderer-gl.js',
