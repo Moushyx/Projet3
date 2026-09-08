@@ -40,42 +40,86 @@
   }
 
   const engine = createEngine(canvas);
+  let renderer = null;
 
-  // ---- Géométrie statique du corps et des organes ----
-  const bodyMesh = buildHumanMesh();
-  const organParts = buildOrganGeometry(ORGAN_SHAPES);
-
-  // Tampons de projection réutilisés d'une image à l'autre (évite de créer
-  // des milliers d'objets par seconde).
-  const vertexCount = bodyMesh.positions.length / 3;
-  const projX = new Float32Array(vertexCount);
-  const projY = new Float32Array(vertexCount);
-  const projDist = new Float32Array(vertexCount);
-  const partDepth = new Float32Array(bodyMesh.parts.length);
-
-  // ---- Méridiens : segments de ligne + points d'acupression ----
-  const meridianSegments = []; // { a, b, color, meridianId }
-  const acupoints = []; // { pos, meridian, point, side, color, screen:{x,y,dist} }
-
-  function mirrorX(pos) { return [-pos[0], pos[1], pos[2]]; }
+  // ---- Points d'acupression et trajets, calés sur le modèle ----
+  // Les données ne contiennent que le côté droit ; le côté gauche en est le
+  // reflet, comme le veut la symétrie des méridiens bilatéraux.
+  const acupoints = [];
+  function mirrorX(p) { return [-p[0], p[1], p[2]]; }
 
   MERIDIANS.forEach((meridian) => {
     const sides = meridian.bilateral ? ['R', 'L'] : ['C'];
     sides.forEach((side) => {
-      const positions = meridian.points.map((p) => (side === 'L' ? mirrorX(p.pos) : p.pos));
-      for (let i = 0; i < positions.length - 1; i++) {
-        meridianSegments.push({ a: positions[i], b: positions[i + 1], color: meridian.color, meridianId: meridian.id });
-      }
-      meridian.points.forEach((point, idx) => {
+      meridian.points.forEach((point) => {
+        const base = POINTS_3D[point.id] || point.pos;
         acupoints.push({
-          pos: positions[idx],
+          pos: side === 'L' ? mirrorX(base) : base.slice(),
           meridian, point, side,
-          color: meridian.color,
+          color: hexToUnit(meridian.color),
           screen: null,
         });
       });
     });
   });
+
+  function hexToUnit(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  }
+
+  // Un tracé de méridien est un vrai tube : une ligne d'un pixel serait
+  // invisible sur un écran dense, et un trait plat ne se ferait pas masquer
+  // par le corps quand il passe de l'autre côté.
+  function buildTube(polyline, radius, sides) {
+    const pos = [], nrm = [], idx = [];
+    const rings = [];
+    for (let i = 0; i < polyline.length; i++) {
+      const a = polyline[Math.max(0, i - 1)], b = polyline[Math.min(polyline.length - 1, i + 1)];
+      let t = V3.normalize(V3.sub(b, a));
+      if (V3.length(t) < 1e-6) t = [0, 1, 0];
+      let u = V3.cross([0, 1, 0], t);
+      if (V3.length(u) < 1e-6) u = V3.cross([1, 0, 0], t);
+      u = V3.normalize(u);
+      const v = V3.normalize(V3.cross(t, u));
+      const ring = [];
+      for (let s2 = 0; s2 < sides; s2++) {
+        const ang = (s2 / sides) * Math.PI * 2;
+        const c = Math.cos(ang), si = Math.sin(ang);
+        const n = [u[0]*c + v[0]*si, u[1]*c + v[1]*si, u[2]*c + v[2]*si];
+        ring.push(pos.length / 3);
+        pos.push(polyline[i][0] + n[0]*radius, polyline[i][1] + n[1]*radius, polyline[i][2] + n[2]*radius);
+        nrm.push(n[0], n[1], n[2]);
+      }
+      rings.push(ring);
+    }
+    for (let i = 0; i < rings.length - 1; i++) {
+      for (let s2 = 0; s2 < sides; s2++) {
+        const s3 = (s2 + 1) % sides;
+        const a = rings[i][s2], b = rings[i][s3], c = rings[i+1][s3], d = rings[i+1][s2];
+        idx.push(a, b, c, a, c, d);
+      }
+    }
+    return { pos: new Float32Array(pos), nrm: new Float32Array(nrm), idx: new Uint16Array(idx) };
+  }
+
+  function buildMeridianBatches() {
+    const batches = [];
+    MERIDIANS.forEach((m) => {
+      const pieces = MERIDIAN_PATHS[m.id] || [];
+      const sides = m.bilateral ? [false, true] : [false];
+      pieces.forEach((path) => {
+        if (!path || path.length < 2) return;
+        sides.forEach((flip) => {
+          const poly = flip ? path.map(mirrorX) : path;
+          const tube = buildTube(poly, 0.0035, 5);
+          tube.meridianId = m.id;
+          batches.push(tube);
+        });
+      });
+    });
+    return batches;
+  }
 
   // ---- État de sélection ----
   let selectedMeridianId = null;
@@ -145,7 +189,7 @@
       btn.addEventListener('click', () => {
         const p = meridian.points.find((pt) => pt.id === btn.dataset.point);
         showPointInfo(meridian, p, 'R');
-        focusOnPosition(p.pos);
+        focusOnPosition(POINTS_3D[p.id] || p.pos);
       });
     });
     requestAnimationFrame(() => updateSceneShift(true));
@@ -177,7 +221,7 @@
       btn.addEventListener('click', () => {
         const p = meridian.points.find((pt) => pt.id === btn.dataset.point);
         showPointInfo(meridian, p, side);
-        focusOnPosition(p.pos);
+        focusOnPosition(POINTS_3D[p.id] || p.pos);
       });
     });
     requestAnimationFrame(() => updateSceneShift(true));
@@ -245,7 +289,7 @@
         selectedMeridianId = meridian.id;
         highlightChip(meridian.id);
         showPointInfo(meridian, point, 'R');
-        focusOnPosition(point.pos);
+        focusOnPosition(POINTS_3D[point.id] || point.pos);
         searchResults.classList.remove('open');
         searchInput.value = '';
         searchInput.blur();
@@ -295,210 +339,87 @@
   });
 
   // ---- Boucle de rendu ----
-  function hexToRgb(hex) {
-    const n = parseInt(hex.slice(1), 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const organParts = buildOrganGeometry(ORGAN_SHAPES);
+
+  function meridianStyle(id) {
+    const selected = selectedMeridianId === id;
+    const neutral = !selectedMeridianId;
+    const m = MERIDIANS.find((mm) => mm.id === id);
+    return {
+      color: hexToUnit(m.color),
+      alpha: selected ? 1 : neutral ? 0.55 : 0.07,
+      glow: selected ? 0.25 : 0,
+    };
   }
-  const colorCache = new Map();
-  function rgba(hex, alpha) {
-    let rgb = colorCache.get(hex);
-    if (!rgb) { rgb = hexToRgb(hex); colorCache.set(hex, rgb); }
-    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
+
+  const pointDraws = [];
+  function collectPoints(t) {
+    pointDraws.length = 0;
+    acupoints.forEach((ap) => {
+      const active = isMeridianActive(ap.meridian.id);
+      const isSelected = selectedAcupoint
+        && selectedAcupoint.point.id === ap.point.id
+        && selectedAcupoint.side === ap.side;
+      const pulse = active ? 0.5 + Math.sin(t * 2.2 + ap.pos[1] * 5) * 0.15 : 0;
+      pointDraws.push({
+        pos: ap.pos,
+        color: ap.color,
+        radius: isSelected ? 0.016 : active ? 0.0105 : 0.006,
+        alpha: active ? 1 : 0.28,
+        glow: isSelected ? 0.8 : active ? pulse * 0.5 : 0,
+      });
+    });
+    return pointDraws;
+  }
+
+  function collectOrgans() {
+    const out = [];
+    organParts.forEach((part) => {
+      if (isOrganActive(part.organKey) !== true) return;
+      out.push({
+        pos: part.pos,
+        color: hexToUnit(part.color),
+        radius: part.radius,
+        alpha: 0.42,
+        glow: 0.3,
+      });
+    });
+    return out;
   }
 
   function render() {
-    const ctx = engine.ctx;
     engine.camera.occludedBottom += (occludedTarget.bottom - engine.camera.occludedBottom) * 0.16;
     engine.camera.occludedRight += (occludedTarget.right - engine.camera.occludedRight) * 0.16;
-    const basis = engine.getBasis();
-    const w = engine.width, h = engine.height;
-    ctx.clearRect(0, 0, w, h);
+    engine.updateMatrices();
 
-    // Fond dégradé
-    const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, '#101c30');
-    grad.addColorStop(1, '#070c17');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-
-    const drawList = [];
-
-    // Sol (cercle au niveau des pieds)
-    const groundPts = [];
-    const groundN = 40;
-    for (let i = 0; i < groundN; i++) {
-      const a = (i / groundN) * Math.PI * 2;
-      const p = engine.project([Math.cos(a) * 0.9, 0, Math.sin(a) * 0.9], basis);
-      if (p) groundPts.push(p);
-    }
-    if (groundPts.length === groundN) {
-      const avgDist = groundPts.reduce((s, p) => s + p.dist, 0) / groundN;
-      drawList.push({
-        dist: avgDist + 3,
-        draw: () => {
-          ctx.beginPath();
-          groundPts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-          ctx.closePath();
-          ctx.fillStyle = 'rgba(30,50,80,0.35)';
-          ctx.fill();
-        },
-      });
+    if (renderer) {
+      const t = performance.now() * 0.002;
+      // Direction caméra -> sujet, pour la lampe frontale du rendu.
+      const eye = engine.getCameraPosition();
+      const toCamera = V3.normalize(V3.sub(eye, engine.camera.target));
+      renderer.beginFrame(engine.viewProj, engine.width, engine.height, engine.dpr, toCamera);
+      renderer.drawOverlay(engine.viewProj, meridianStyle, collectPoints(t));
+      // Les organes sont à l'intérieur du corps : sans mise à l'écart du test
+      // de profondeur, ils resteraient invisibles derrière la peau.
+      renderer.drawThrough(engine.viewProj, collectOrgans());
     }
 
-    // Corps : maillage anatomique. On projette d'abord tous les sommets,
-    // puis on écarte les facettes tournées vers l'arrière (invisibles).
-    const pos = bodyMesh.positions;
-    for (let i = 0; i < vertexCount; i++) {
-      const pr = engine.project([pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]], basis);
-      if (pr) { projX[i] = pr.x; projY[i] = pr.y; projDist[i] = pr.dist; }
-      else { projDist[i] = -1; }
-    }
-    const camPos = basis.camPos;
-    const smoothShading = !engine.isDragBusy();
-    for (let i = 0; i < bodyMesh.parts.length; i++) {
-      const ctr = bodyMesh.parts[i].centroid;
-      const pr = engine.project(ctr, basis);
-      partDepth[i] = pr ? pr.dist : 1e6;
-    }
-    for (let f = 0; f < bodyMesh.faces.length; f++) {
-      const face = bodyMesh.faces[f];
-      const c = face.center, n = face.n;
-      // Facette cachée : sa normale s'éloigne de la caméra
-      if (n[0] * (c[0] - camPos[0]) + n[1] * (c[1] - camPos[1]) + n[2] * (c[2] - camPos[2]) >= 0) continue;
-      const da = projDist[face.a], db = projDist[face.b], dc = projDist[face.c], dd = projDist[face.d];
-      if (da < 0 || db < 0 || dc < 0 || dd < 0) continue;
-      const ax = projX[face.a], ay = projY[face.a];
-      const bx = projX[face.b], by = projY[face.b];
-      const cx = projX[face.c], cy = projY[face.c];
-      const dx = projX[face.d], dy = projY[face.d];
-      drawList.push({
-        key: partDepth[face.part],
-        dist: (da + db + dc + dd) * 0.25,
-        draw: () => {
-          ctx.beginPath();
-          ctx.moveTo(ax, ay);
-          ctx.lineTo(bx, by);
-          ctx.lineTo(cx, cy);
-          ctx.lineTo(dx, dy);
-          ctx.closePath();
-          let paint;
-          if (smoothShading) {
-            // Dégradé entre les deux bords de la facette : la lumière devient
-            // continue d'une facette à l'autre, le facettage disparaît.
-            const g = face.axial
-              ? ctx.createLinearGradient((ax + bx) / 2, (ay + by) / 2, (dx + cx) / 2, (dy + cy) / 2)
-              : ctx.createLinearGradient((ax + dx) / 2, (ay + dy) / 2, (bx + cx) / 2, (by + cy) / 2);
-            g.addColorStop(0, face.colorA);
-            g.addColorStop(1, face.colorB);
-            paint = g;
-          } else {
-            paint = face.colorFlat;
-          }
-          ctx.fillStyle = paint;
-          ctx.fill();
-          // Le contour de même teinte comble les fissures d'anticrénelage
-          // entre facettes voisines.
-          ctx.strokeStyle = face.colorFlat;
-          ctx.lineWidth = 0.8;
-          ctx.stroke();
-        },
-      });
-    }
-
-    // Organes : le corps est opaque, l'organe du canal sélectionné est donc
-    // dessiné par-dessus, en transparence, comme une vue en transparence.
-    organParts.forEach((part) => {
-      if (isOrganActive(part.organKey) !== true) return;
-      const p = engine.project(part.pos, basis);
-      if (!p) return;
-      const r = Math.max(0.5, part.radius * p.scale);
-      drawList.push({
-        dist: -2, // toujours au-dessus du corps
-        draw: () => {
-          ctx.save();
-          ctx.shadowColor = part.color;
-          ctx.shadowBlur = 16;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = rgba(part.color, 0.42);
-          ctx.fill();
-          ctx.lineWidth = 1.5;
-          ctx.strokeStyle = rgba(part.color, 0.85);
-          ctx.stroke();
-          ctx.restore();
-        },
-      });
-    });
-
-    // Segments de méridiens
-    meridianSegments.forEach((seg) => {
-      const isSelectedOne = selectedMeridianId === seg.meridianId;
-      const neutral = !selectedMeridianId;
-      const opacity = isSelectedOne ? 0.95 : neutral ? 0.4 : 0.06;
-      const width = isSelectedOne ? 2.6 : neutral ? 1.3 : 1;
-      const pa = engine.project(seg.a, basis);
-      const pb = engine.project(seg.b, basis);
-      if (!pa || !pb) return;
-      const dist = (pa.dist + pb.dist) / 2 - 0.012;
-      drawList.push({
-        dist,
-        draw: () => {
-          ctx.beginPath();
-          ctx.moveTo(pa.x, pa.y);
-          ctx.lineTo(pb.x, pb.y);
-          ctx.strokeStyle = rgba(seg.color, opacity);
-          ctx.lineWidth = width;
-          ctx.stroke();
-        },
-      });
-    });
-
-    // Points d'acupression
-    const t = performance.now() * 0.002;
-    acupoints.forEach((ap) => {
-      const p = engine.project(ap.pos, basis);
-      ap.screen = p;
-      if (!p) return;
-      const active = isMeridianActive(ap.meridian.id);
-      const isSelected = selectedAcupoint && selectedAcupoint.point.id === ap.point.id && selectedAcupoint.side === ap.side;
-      const baseR = Math.max(active ? 4.5 : 1.8, 0.012 * p.scale * (active ? 1 : 0.5));
-      const pulse = active ? (0.5 + Math.sin(t * 2.2 + ap.pos[1] * 5) * 0.15) : 0;
-      const opacity = active ? Math.min(1, 0.5 + pulse) : 0.22;
-      drawList.push({
-        dist: p.dist - 0.022,
-        draw: () => {
-          if (active) {
-            ctx.save();
-            ctx.shadowColor = ap.color;
-            ctx.shadowBlur = isSelected ? 16 : 8;
-          }
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, isSelected ? baseR * 1.6 : baseR, 0, Math.PI * 2);
-          ctx.fillStyle = rgba(ap.color, opacity);
-          ctx.fill();
-          if (isSelected) {
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = '#ffffff';
-            ctx.stroke();
-          }
-          if (active) ctx.restore();
-        },
-      });
-    });
-
-    // Tri du peintre : d'abord la clé de groupe (partie du corps pour le
-    // maillage, profondeur propre pour le reste), puis la profondeur exacte.
-    for (let i = 0; i < drawList.length; i++) {
-      if (drawList[i].key === undefined) drawList[i].key = drawList[i].dist;
-    }
-    drawList.sort((a, b) => (b.key - a.key) || (b.dist - a.dist));
-    drawList.forEach((item) => item.draw());
+    // Positions à l'écran, tenues à jour pour le pointage tactile.
+    acupoints.forEach((ap) => { ap.screen = engine.project(ap.pos); });
 
     requestAnimationFrame(render);
   }
 
   window.addEventListener('resize', () => updateSceneShift(infoPanel.classList.contains('open')));
 
-  if (loadingEl) loadingEl.remove();
+  loadBodyModel('assets/body.bin').then((model) => {
+    renderer = createRenderer(canvas, model);
+    renderer.setMeridianTubes(buildMeridianBatches());
+    if (loadingEl) loadingEl.remove();
+  }).catch((err) => {
+    if (loadingEl) loadingEl.textContent = 'Modèle 3D non chargé : ' + err.message;
+    console.error(err);
+  });
+
   requestAnimationFrame(render);
 })();

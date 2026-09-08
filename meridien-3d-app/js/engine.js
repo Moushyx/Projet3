@@ -3,7 +3,6 @@
 // Aucune dépendance externe — conçu pour tourner offline sur iPhone (Safari/PWA).
 
 function createEngine(canvas) {
-  const ctx = canvas.getContext('2d');
   let width = 0, height = 0, dpr = 1;
 
   function resize() {
@@ -12,7 +11,6 @@ function createEngine(canvas) {
     height = canvas.clientHeight;
     canvas.width = Math.max(1, Math.round(width * dpr));
     canvas.height = Math.max(1, Math.round(height * dpr));
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   resize();
   window.addEventListener('resize', resize);
@@ -23,7 +21,7 @@ function createEngine(canvas) {
     theta: 0.25, // azimut (rad)
     phi: 1.42,   // élévation depuis l'axe Y (rad), ~PI/2 = niveau des yeux
     fov: 40 * Math.PI / 180,
-    minRadius: 0.55,
+    minRadius: 0.35,
     maxRadius: 5.5,
     // Surface masquée par la fiche de détail (en pixels). La scène est cadrée
     // dans la zone réellement visible, jamais sous le panneau.
@@ -53,24 +51,65 @@ function createEngine(canvas) {
     return { camPos, x, y, z };
   }
 
-  // Projette un point monde -> {x, y (pixels CSS), dist (profondeur caméra), scale (px/mètre)}
-  function project(pos, basis) {
-    const rel = V3.sub(pos, basis.camPos);
-    const camX = V3.dot(rel, basis.x);
-    const camY = V3.dot(rel, basis.y);
-    const camZ = V3.dot(rel, basis.z);
-    const dist = -camZ;
-    if (dist <= 0.02) return null;
-    // Cadrage sur la zone visible (ce que la fiche ne recouvre pas)
+  // ---- Matrices ----
+  // La projection est volontairement décentrée : la scène doit se composer
+  // dans la zone que la fiche de détail laisse libre, pas au milieu du canevas.
+  const viewMatrix = new Float32Array(16);
+  const projMatrix = new Float32Array(16);
+  const viewProj = new Float32Array(16);
+
+  function multiply(out, a, b) {
+    for (let c = 0; c < 4; c++) {
+      for (let r = 0; r < 4; r++) {
+        let v = 0;
+        for (let k = 0; k < 4; k++) v += a[k * 4 + r] * b[c * 4 + k];
+        out[c * 4 + r] = v;
+      }
+    }
+    return out;
+  }
+
+  function updateMatrices() {
+    const basis = getBasis();
+    const { camPos, x, y, z } = basis;
+    viewMatrix[0] = x[0]; viewMatrix[4] = x[1]; viewMatrix[8] = x[2];
+    viewMatrix[1] = y[0]; viewMatrix[5] = y[1]; viewMatrix[9] = y[2];
+    viewMatrix[2] = z[0]; viewMatrix[6] = z[1]; viewMatrix[10] = z[2];
+    viewMatrix[12] = -V3.dot(x, camPos);
+    viewMatrix[13] = -V3.dot(y, camPos);
+    viewMatrix[14] = -V3.dot(z, camPos);
+    viewMatrix[3] = viewMatrix[7] = viewMatrix[11] = 0; viewMatrix[15] = 1;
+
     const usableH = Math.max(160, height - camera.occludedBottom);
     const usableW = Math.max(160, width - camera.occludedRight);
     const f = (usableH / 2) / Math.tan(camera.fov / 2);
-    const scale = f / dist;
+    const near = 0.02, far = 40;
+    projMatrix.fill(0);
+    projMatrix[0] = 2 * f / width;
+    projMatrix[5] = 2 * f / height;
+    projMatrix[8] = -(usableW / width - 1);
+    projMatrix[9] = -(1 - usableH / height);
+    projMatrix[10] = (far + near) / (near - far);
+    projMatrix[11] = -1;
+    projMatrix[14] = 2 * far * near / (near - far);
+
+    multiply(viewProj, projMatrix, viewMatrix);
+    return basis;
+  }
+
+  // Projette un point monde vers les pixels CSS du canevas.
+  // Sert au pointage tactile et au cadrage ; le GPU utilise la même matrice.
+  function project(pos) {
+    const m = viewProj;
+    const x = pos[0], y = pos[1], z = pos[2];
+    const cx = m[0]*x + m[4]*y + m[8]*z + m[12];
+    const cy = m[1]*x + m[5]*y + m[9]*z + m[13];
+    const cw = m[3]*x + m[7]*y + m[11]*z + m[15];
+    if (cw <= 0.001) return null;
     return {
-      x: usableW / 2 + camX * scale,
-      y: usableH / 2 - camY * scale,
-      dist,
-      scale,
+      x: (cx / cw + 1) * 0.5 * width,
+      y: (1 - cy / cw) * 0.5 * height,
+      dist: cw,
     };
   }
 
@@ -207,9 +246,12 @@ function createEngine(canvas) {
   }, { passive: false });
 
   return {
-    ctx, camera,
+    camera,
     get width() { return width; },
     get height() { return height; },
+    get dpr() { return dpr; },
+    viewProj,
+    updateMatrices,
     getCameraPosition, getBasis, project,
     isDragBusy: () => dragging || activePointers.size > 1,
     // Vrai juste après un geste à deux doigts : évite qu'un relâchement de

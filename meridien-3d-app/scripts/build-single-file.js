@@ -10,9 +10,17 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const FONTS = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500;600&family=Instrument+Sans:wght@400;500;600&display=swap';
 
 const css = read('css/style.css');
-const scripts = ['js/vec3.js', 'js/data.js', 'js/geometry.js', 'js/mesh.js', 'js/engine.js', 'js/app.js']
-  .map((f) => `/* ===== ${f} ===== */\n${read(f)}`)
-  .join('\n\n');
+
+// Le modèle anatomique voyage avec la page, encodé en base64 : une page unique
+// ne peut pas aller chercher un fichier à côté d'elle.
+const modelB64 = fs.readFileSync(path.join(root, 'assets', 'body.bin')).toString('base64');
+const embedded = `/* ===== modèle anatomique embarqué ===== */\nconst EMBEDDED_BODY_MODEL = "${modelB64}";`;
+
+const scripts = [embedded].concat(
+  ['js/vec3.js', 'js/data.js', 'js/points-3d.js', 'js/geometry.js', 'js/model.js',
+   'js/renderer-gl.js', 'js/engine.js', 'js/app.js']
+    .map((f) => `/* ===== ${f} ===== */\n${read(f)}`)
+).join('\n\n');
 
 // Corps de page repris de index.html, sans les balises propres au site
 // (manifest, service worker, icônes) qui n'ont pas de sens en page unique.
