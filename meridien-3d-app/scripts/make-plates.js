@@ -17,7 +17,7 @@ const zlib = require('zlib');
 const ROOT = path.join(__dirname, '..');
 global.V3 = require(path.join(ROOT, 'js', 'vec3.js')).V3;
 const { parseBodyModel } = require(path.join(ROOT, 'js', 'model.js'));
-const { POINTS_3D } = require(path.join(ROOT, 'js', 'points-3d.js'));
+const { POINTS_3D, POINT_COTES } = require(path.join(ROOT, 'js', 'points-3d.js'));
 const { MERIDIANS } = require(path.join(ROOT, 'js', 'data.js'));
 const { POINT_RULES } = require('./point-rules.js');
 
@@ -320,40 +320,80 @@ Object.entries(POINTS_3D).forEach(([id, pos]) => {
   assign[id] = best.pid;
 });
 
-// Cadrage ajusté sur les points de chaque planche. Une marge généreuse dans le
-// plan de l'image laisse voir le relief alentour ; le long du regard, on garde
-// tout, sinon la silhouette serait tronquée en profondeur.
-const MARGE = 0.07;
-PLATES.forEach((pl) => {
-  const mine = Object.entries(assign).filter(([, pid]) => pid === pl.id).map(([id]) => POINTS_3D[id]);
-  let bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
-  mine.forEach((p) => {
+// Cadrage : une planche montre une région du corps, pas un gros plan.
+//
+// Un cadre ajusté sur les seuls points donnait un ruban de peau sans aucun
+// repère : on y voyait le point, mais pas où il tombe. Chaque planche cadre
+// donc maintenant une unité anatomique entière — la tête, le tronc, le membre,
+// la main, le pied —, comme une planche d'atlas. Le doigt agrandit ensuite.
+const REGION_DE_PLANCHE = {
+  'tete-face': 'tete', 'tete-profil': 'tete', 'tete-dos': 'tete',
+  'tronc-face': 'tronc', 'tronc-dos': 'tronc', 'tronc-profil': 'tronc',
+  'bras-face': 'bras', 'bras-dos': 'bras',
+  'main-dos': 'main', 'main-paume': 'main',
+  'jambe-face': 'jambe', 'jambe-dos': 'jambe',
+  'jambe-interne': 'jambe', 'jambe-externe': 'jambe',
+  'pied-dos': 'pied', 'pied-plante': 'pied',
+};
+
+const dirMain = V3.normalize(V3.sub(L.fingertip, L.wrist));
+const PREDICAT = {
+  tete:  (v) => v[1] > L.chinY - 0.09 && Math.abs(v[0]) < 0.145,
+  tronc: (v) => v[1] > L.pubis[1] - 0.05 && v[1] < L.neckBase + 0.07 && !L.isArm(v),
+  bras:  (v) => L.isArm(v),
+  main:  (v) => V3.dot(V3.sub([v[0], v[1], v[2]], L.wrist), dirMain) > -0.02 && L.isArm(v),
+  jambe: (v) => v[1] < L.crotch + 0.05 && v[0] > 0.02 && !L.isArm(v),
+  pied:  (v) => v[1] < 0.14 && v[0] > 0.02,
+};
+
+const BOITES = {};
+Object.entries(PREDICAT).forEach(([nom, ok]) => {
+  const bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  V.forEach((v) => {
+    if (!ok(v)) return;
     for (let k = 0; k < 3; k++) {
-      bb[k] = Math.min(bb[k], p[k]);
-      bb[k+3] = Math.max(bb[k+3], p[k]);
+      if (v[k] < bb[k]) bb[k] = v[k];
+      if (v[k] > bb[k+3]) bb[k+3] = v[k];
     }
   });
-  if (!mine.length) bb = [-0.1, 0.8, -0.1, 0.1, 1.0, 0.1];
+  BOITES[nom] = bb;
+});
+
+const UN_SEUL_COTE = { bras: 1, main: 1, jambe: 1, pied: 1 };
+
+PLATES.forEach((pl) => {
+  const region = REGION_DE_PLANCHE[pl.id];
+  const src = BOITES[region] || [-0.1, 0.8, -0.1, 0.1, 1.0, 0.1];
+  const bb = src.slice();
   const dir = V3.normalize(pl.dir);
   for (let k = 0; k < 3; k++) {
     // Marge large dans l'axe du regard, serrée dans le plan de l'image.
-    const m = MARGE + Math.abs(dir[k]) * 0.30;
+    const m = 0.025 + Math.abs(dir[k]) * 0.30;
     bb[k] -= m; bb[k+3] += m;
   }
-  // Le corps est symétrique : une planche de membre ne doit pas déborder sur
-  // l'autre côté, qui viendrait s'interposer devant le sujet.
-  if (mine.length && mine.every((p) => p[0] > 0.02)) bb[0] = Math.max(bb[0], 0.005);
+  // Un membre ne déborde pas sur celui d'en face, qui viendrait s'interposer.
+  if (UN_SEUL_COTE[region] || pl.id === 'tronc-profil') bb[0] = Math.max(bb[0], 0.004);
   pl.box = bb;
-  pl.compte = mine.length;
+  pl.compte = Object.values(assign).filter((pid) => pid === pl.id).length;
 });
 
 const frames = {};
 PLATES.forEach((pl) => { frames[pl.id] = plateFrame(pl); });
 
 const assignment = {};
+const r1 = (v) => Math.round(v * 10) / 10;
 Object.entries(assign).forEach(([id, pid]) => {
   const pr = project(frames[pid], POINTS_3D[id]);
-  assignment[id] = { planche: pid, x: Math.round(pr.x * 10) / 10, y: Math.round(pr.y * 10) / 10 };
+  const entry = { planche: pid, x: r1(pr.x), y: r1(pr.y) };
+  const cs = (POINT_COTES[id] || []).map((c) => {
+    const a = project(frames[pid], c.a);
+    const o = { ax: r1(a.x), ay: r1(a.y), texte: c.texte };
+    if (c.b) { const b = project(frames[pid], c.b); o.bx = r1(b.x); o.by = r1(b.y); }
+    if (c.depart) o.depart = c.depart;
+    return o;
+  });
+  if (cs.length) entry.cotes = cs;
+  assignment[id] = entry;
 });
 
 // ---------- Repères du visage ----------
@@ -402,7 +442,7 @@ function traceVisage(img, plate, frame) {
     for (let i = 0; i <= n; i++) {
       const x = Math.round(pa.x + (pb.x - pa.x) * i / n);
       const y = Math.round(pa.y + (pb.y - pa.y) * i / n);
-      set(x, y, c); set(x + 1, y, c); set(x, y + 1, c);
+      set(x, y, c); set(x + 1, y, c); set(x, y + 1, c); set(x + 1, y + 1, c);
     }
   };
   // Courbe passant par une suite de repères (lat, hauteur).
@@ -411,7 +451,8 @@ function traceVisage(img, plate, frame) {
       trait(point3d(pts[i][0], pts[i][1]), point3d(pts[i+1][0], pts[i+1][1]), c);
     }
   };
-  const G = 110; // gris du croquis
+  const G = 88; // gris du croquis : assez soutenu pour se lire, assez clair
+                // pour qu'on ne le prenne pas pour le contour du modèle.
 
   if (plate.id === 'tete-face') {
     [1, -1].forEach((cote) => {

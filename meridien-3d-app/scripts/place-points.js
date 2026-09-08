@@ -619,6 +619,88 @@ if (missing.length) console.log('SANS RÈGLE :', missing.map((r) => r.id).join('
 console.log('points placés :', Object.keys(placed).length);
 
 // ---------------------------------------------------------------
+// Cotes : la mesure qui définit le point
+// ---------------------------------------------------------------
+// Sur une planche d'acupuncture, ce qui situe le point n'est pas le point :
+// c'est la cote qui le relie à son repère osseux — « 3 cun sous le pli du
+// coude », « 1,5 cun de la ligne médiane ». On produit donc, pour chaque
+// point, les segments de mesure correspondants, en coordonnées du corps ; les
+// planches les projetteront.
+const cotes = {};
+
+function fmtCun(v) {
+  const t = (Math.round(v * 10) / 10).toString().replace('.', ',');
+  return t + ' cun';
+}
+
+// Point de la ligne médiane à une hauteur donnée, devant ou derrière.
+function midlineSkin(y, devant) {
+  const s = surfaceColumn(y, 0, devant) || [0, y, devant ? 0.10 : -0.10];
+  return [0, y, s[2] + (devant ? 0.004 : -0.004)];
+}
+
+MERIDIANS.forEach((m) => {
+  m.points.forEach((pt) => {
+    const rule = POINT_RULES[pt.id];
+    if (!rule || !placed[pt.id]) return;
+    const out = [];
+    const pos = placed[pt.id];
+
+    if (rule.zone === 'torse' && rule.face !== 'side') {
+      const yP = torsoY(rule.from, rule.cun);
+      const yA = rule.from === 'nombril' ? NAVEL_Y : NOTCH_Y;
+      const nomA = rule.from === 'nombril' ? 'nombril' : 'CV22';
+      if (Math.abs(rule.cun) > 0.01) {
+        out.push({ a: midlineSkin(yA, true), b: midlineSkin(yP, true), texte: fmtCun(Math.abs(rule.cun)), depart: nomA });
+      }
+      if (Math.abs(rule.lat) > 0.01) {
+        out.push({ a: midlineSkin(yP, true), b: pos, texte: fmtCun(rule.lat) });
+      }
+    } else if (rule.zone === 'dos') {
+      const y = vertebraY(rule.vertebre);
+      if (Math.abs(rule.lat) > 0.01) {
+        out.push({ a: midlineSkin(y, false), b: pos, texte: fmtCun(rule.lat), depart: rule.vertebre });
+      } else {
+        out.push({ a: midlineSkin(y, false), texte: rule.vertebre });
+      }
+    } else if (rule.zone === 'nuque' && Math.abs(rule.lat) > 0.01) {
+      const y = L.neckBase + 0.09;
+      out.push({ a: midlineSkin(y, false), b: pos, texte: fmtCun(rule.lat) });
+    } else if (rule.zone === 'bras') {
+      // Au-delà de 15 cun le repère naturel est le pli du poignet, en deçà
+      // celui du coude : c'est ainsi que les manuels énoncent la mesure.
+      const versPoignet = rule.cun >= 15;
+      const ancre = versPoignet ? 21 : 9;
+      const ecart = Math.abs(rule.cun - ancre);
+      if (ecart > 0.2) {
+        const r = place('cote', { zone: 'bras', cun: ancre, angle: rule.angle });
+        const sn = snapToSkin(r.guess, r.rayon || 0.16, r.facing);
+        out.push({ a: sn.pos, b: pos, texte: fmtCun(ecart), depart: versPoignet ? 'pli du poignet' : 'pli du coude' });
+      }
+    } else if (rule.zone === 'jambe') {
+      const versCheville = rule.cun > 26;
+      const ancre = versCheville ? 34 : 18;
+      const ecart = Math.abs(rule.cun - ancre);
+      if (ecart > 0.2) {
+        const r = place('cote', { zone: 'jambe', cun: ancre, angle: rule.angle });
+        const sn = snapToSkin(r.guess, r.rayon || 0.16, r.facing);
+        out.push({ a: sn.pos, b: pos, texte: fmtCun(ecart), depart: versCheville ? 'malléole' : 'genou' });
+      }
+    }
+
+    if (out.length) {
+      cotes[pt.id] = out.map((c) => ({
+        a: c.a.map((v) => Math.round(v * 10000) / 10000),
+        b: c.b ? c.b.map((v) => Math.round(v * 10000) / 10000) : undefined,
+        texte: c.texte,
+        depart: c.depart,
+      }));
+    }
+  });
+});
+console.log('points cotés :', Object.keys(cotes).length);
+
+// ---------------------------------------------------------------
 // Trajets plaqués sur la peau
 // ---------------------------------------------------------------
 const paths = {};
@@ -683,7 +765,10 @@ const POINTS_3D = ${JSON.stringify(placed)};
 
 const MERIDIAN_PATHS = ${JSON.stringify(paths)};
 
-if (typeof module !== 'undefined') module.exports = { POINTS_3D, MERIDIAN_PATHS };
+// Segments de mesure, en coordonnées du corps : { a, b, texte, depart }.
+const POINT_COTES = ${JSON.stringify(cotes)};
+
+if (typeof module !== 'undefined') module.exports = { POINTS_3D, MERIDIAN_PATHS, POINT_COTES };
 `;
 fs.writeFileSync(path.join(ROOT, 'js', 'points-3d.js'), out);
 console.log('écrit js/points-3d.js :', (out.length / 1024).toFixed(0), 'Ko');

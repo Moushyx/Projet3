@@ -12,10 +12,25 @@
   const btnBack = document.getElementById('btn-back');
   const btnReset = document.getElementById('btn-reset');
   const btnAll = document.getElementById('btn-all');
+  const btnProtocoles = document.getElementById('btn-protocoles');
+  const btnHorloge = document.getElementById('btn-horloge');
+  const btnQuiz = document.getElementById('btn-quiz');
+  const btnFavoris = document.getElementById('btn-favoris');
   const searchInput = document.getElementById('search-input');
   const searchResults = document.getElementById('search-results');
   const loadingEl = document.getElementById('loading');
   const hintEl = document.getElementById('hint');
+
+  // Favoris : gardés dans le navigateur, ils survivent à la fermeture de la page.
+  const CLE_FAVORIS = 'meridiens3d.favoris';
+  let favoris = [];
+  try { favoris = JSON.parse(localStorage.getItem(CLE_FAVORIS) || '[]'); } catch (e) { favoris = []; }
+  function estFavori(id) { return favoris.indexOf(id) >= 0; }
+  function basculerFavori(id) {
+    const i = favoris.indexOf(id);
+    if (i >= 0) favoris.splice(i, 1); else favoris.push(id);
+    try { localStorage.setItem(CLE_FAVORIS, JSON.stringify(favoris)); } catch (e) { /* navigation privée */ }
+  }
 
   const DISCLAIMER = "Positions indicatives et simplifiées, à but pédagogique. Ne remplace pas un avis médical ni la formation d'un praticien.";
 
@@ -41,10 +56,18 @@
     return 'assets/planches/' + id + '.png';
   }
 
-  // Vue 2D de la zone : la planche anatomique correspondante, cadrée sur le
-  // point choisi, avec ses voisins repérés. Les planches viennent du même
-  // modèle que la vue 3D, donc les positions y sont exactes.
-  function buildZoneView(pointId, side) {
+  // ---------------------------------------------------------------
+  // Vue 2D de la zone
+  // ---------------------------------------------------------------
+  // Une planche d'acupuncture ne montre pas un gros plan : elle montre une
+  // région entière — la tête, la main, le bras — avec le point en rouge, ses
+  // voisins en gris, et les cotes en cun qui le relient à son repère osseux.
+  // C'est la cote qui situe le point ; un zoom serré sur un centimètre de peau
+  // ne dit rien de l'endroit où l'on se trouve.
+  //
+  // La planche s'affiche donc entière par défaut. Le doigt peut ensuite
+  // l'agrandir, et le bouton ⤢ la remet en place.
+  function buildZoneView(pointId, side, opts) {
     const info = PLATE_POINTS[pointId];
     if (!info || !PLATES_INFO[info.planche]) return '';
     const plate = PLATES_INFO[info.planche];
@@ -54,75 +77,251 @@
     const data = {
       planche: info.planche,
       src: plateSrc(info.planche),
-      w: plate.w, h: plate.h, pxParMetre: plate.pxParMetre || 1500,
+      w: plate.w, h: plate.h,
       cx: info.x, cy: info.y,
+      cotes: info.cotes || [],
       miroir: side === 'L',
       points: voisins,
       actif: pointId,
+      muet: !!(opts && opts.muet),
     };
     return `
       <div class="zone" data-zone='${JSON.stringify(data).replace(/'/g, '&#39;')}'>
         <div class="zone-head">
           <span class="zone-nom">${plate.nom}${side === 'L' ? ' · côté gauche' : ''}</span>
-          <button class="zone-toggle" type="button">Vue d'ensemble</button>
+          <span class="zone-zoom">
+            <button class="zone-btn" data-zoom="out" type="button" aria-label="Réduire">–</button>
+            <button class="zone-btn" data-zoom="in" type="button" aria-label="Agrandir">+</button>
+            <button class="zone-btn" data-zoom="fit" type="button" aria-label="Voir la planche entière">⤢</button>
+          </span>
         </div>
         <div class="zone-view">
-          <img class="zone-img" alt="${plate.nom}" src="${data.src}" />
-          <div class="zone-marks"></div>
+          <img class="zone-img" alt="${plate.nom}" src="${data.src}" draggable="false" />
+          <svg class="zone-svg" aria-hidden="true"></svg>
         </div>
+        <div class="zone-pied">Point en rouge, voisins en gris. Les cotes sont en cun.</div>
       </div>`;
   }
 
-  // Place l'image et les repères. Le zoom cadre soit le point, soit la planche
-  // entière ; les pastilles gardent leur taille, seule l'image est agrandie.
+  const zoneEtat = new WeakMap();
+
+  function zoneFit(el, d, vw, vh) {
+    const k = Math.min(vw / d.w, vh / d.h) * 0.96;
+    return { k, tx: (vw - d.w * k) / 2, ty: (vh - d.h * k) / 2 };
+  }
+
   function layoutZone(root) {
     const el = root.querySelector('.zone');
     if (!el) return;
     const d = JSON.parse(el.dataset.zone);
     const view = el.querySelector('.zone-view');
     const img = el.querySelector('.zone-img');
-    const marks = el.querySelector('.zone-marks');
+    const svg = el.querySelector('.zone-svg');
     const vw = view.clientWidth, vh = view.clientHeight;
     if (!vw || !vh) return;
 
-    const ensemble = el.classList.contains('vue-ensemble');
-    // Cadrage sur une largeur réelle de 14 cm autour du point : à cette
-    // échelle le relief environnant reste reconnaissable, ce qui est le seul
-    // moyen de situer un point sur son repère anatomique.
-    const LARGEUR_M = 0.14;
-    const z = ensemble
-      ? Math.min(vw / d.w, vh / d.h)
-      : Math.max(0.6, Math.min(4, vw / (LARGEUR_M * d.pxParMetre)));
-    const fx = (x) => (d.miroir ? d.w - x : x);
-    const tx = ensemble ? (vw - d.w * z) / 2 : vw / 2 - fx(d.cx) * z;
-    const ty = ensemble ? (vh - d.h * z) / 2 : vh / 2 - d.cy * z;
+    let st = zoneEtat.get(el);
+    if (!st) { st = zoneFit(el, d, vw, vh); st.base = st.k; zoneEtat.set(el, st); }
+    // Bornes : la planche reste dans le cadre. Quand elle y tient tout entière,
+    // elle est centrée ; sinon on l'empêche seulement de sortir.
+    const cw = d.w * st.k, ch = d.h * st.k;
+    st.tx = cw <= vw ? (vw - cw) / 2 : Math.min(0, Math.max(vw - cw, st.tx));
+    st.ty = ch <= vh ? (vh - ch) / 2 : Math.min(0, Math.max(vh - ch, st.ty));
+
+    const X = (x) => st.tx + (d.miroir ? d.w - x : x) * st.k;
+    const Y = (y) => st.ty + y * st.k;
 
     img.style.width = d.w + 'px';
     img.style.height = d.h + 'px';
     img.style.transformOrigin = '0 0';
-    img.style.transform = `translate(${tx}px, ${ty}px) scale(${z})`;
+    img.style.transform = d.miroir
+      ? `translate(${st.tx + d.w * st.k}px, ${st.ty}px) scale(${-st.k}, ${st.k})`
+      : `translate(${st.tx}px, ${st.ty}px) scale(${st.k})`;
 
-    marks.innerHTML = d.points.map((pt) => {
-      const x = tx + fx(pt.x) * z, y = ty + pt.y * z;
-      const actif = pt.id === d.actif;
-      return `<span class="zone-mark${actif ? ' actif' : ''}" style="left:${x}px;top:${y}px">
-        <i></i><b>${pt.id}</b></span>`;
-    }).join('');
+    // ---- Repères, dessinés en pixels d'écran : ils gardent leur taille quel
+    // que soit l'agrandissement, comme sur une planche imprimée.
+    const parts = [];
+    // Les étiquettes sont empilées à part et dessinées en dernier : sinon une
+    // pastille voisine vient s'asseoir sur le chiffre de la mesure.
+    const etiquettes = [];
+    (d.muet ? [] : d.cotes).forEach((c) => {
+      const ax = X(c.ax), ay = Y(c.ay);
+      if (c.bx === undefined) {
+        parts.push(`<circle class="cote-pt" cx="${ax}" cy="${ay}" r="3"/>`);
+        etiquettes.push(`<text class="cote-txt" x="${ax + 9}" y="${ay + 4}">${c.texte}</text>`);
+        return;
+      }
+      const bx = X(c.bx), by = Y(c.by);
+      const dx = bx - ax, dy = by - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len * 6, ny = dx / len * 6;   // normale, pour les embouts
+      parts.push(`<line class="cote" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"/>`);
+      parts.push(`<line class="cote" x1="${ax - nx}" y1="${ay - ny}" x2="${ax + nx}" y2="${ay + ny}"/>`);
+      parts.push(`<line class="cote" x1="${bx - nx}" y1="${by - ny}" x2="${bx + nx}" y2="${by + ny}"/>`);
+      const mx = (ax + bx) / 2, my = (ay + by) / 2;
+      // L'étiquette se pose perpendiculairement à la cote, du côté opposé au
+      // point : sur une mesure courte, la poser dans l'axe la ferait chevaucher
+      // la pastille et le nom du repère.
+      const ux = nx / 6, uy = ny / 6;
+      const versPoint = (X(d.cx) - mx) * ux + (Y(d.cy) - my) * uy;
+      const sgn = versPoint > 0 ? -1 : 1;
+      const lx = mx + ux * 24 * sgn, ly = my + uy * 24 * sgn;
+      etiquettes.push(`<text class="cote-txt" x="${lx}" y="${ly + 4}" text-anchor="middle">${c.texte}</text>`);
+      if (c.depart) {
+        // Le nom du repère se met dans le prolongement de la cote, au-delà de
+        // son origine : il ne peut alors croiser ni la mesure ni le point.
+        const dx2 = -(bx - ax) / len, dy2 = -(by - ay) / len;
+        etiquettes.push(`<text class="cote-src" x="${ax + dx2 * 12}" y="${ay + dy2 * 12 + 4}" text-anchor="${dx2 < -0.3 ? 'end' : dx2 > 0.3 ? 'start' : 'middle'}">${c.depart}</text>`);
+      }
+    });
 
-    el.querySelector('.zone-toggle').textContent = ensemble ? 'Centrer le point' : "Vue d'ensemble";
+    // Les voisins restent muets tant qu'on n'a pas agrandi : sur un visage, une
+    // dizaine d'étiquettes se recouvrent et cachent ce qu'elles désignent.
+    // Comme sur une planche d'atlas, seul le point cherché est nommé.
+    const nomme = st.k > st.base * 1.7;
+    d.points.forEach((pt) => {
+      if (pt.id === d.actif) return;
+      const x = X(pt.x), y = Y(pt.y);
+      if (x < -20 || y < -20 || x > vw + 20 || y > vh + 20) return;
+      parts.push(`<circle class="pt-hit" data-pt="${pt.id}" cx="${x}" cy="${y}" r="13"/>`);
+      parts.push(`<circle class="pt" cx="${x}" cy="${y}" r="4.5"/>`);
+      if (nomme) etiquettes.push(`<text class="pt-txt" x="${x + 8}" y="${y + 4}">${pt.id}</text>`);
+    });
+
+    const ax = X(d.cx), ay = Y(d.cy);
+    parts.push(`<circle class="pt-actif-halo" cx="${ax}" cy="${ay}" r="13"/>`);
+    parts.push(`<circle class="pt-actif" cx="${ax}" cy="${ay}" r="6.5"/>`);
+    if (!d.muet) etiquettes.push(`<text class="pt-actif-txt" x="${ax + 12}" y="${ay + 6}">${d.actif}</text>`);
+
+    svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+    svg.setAttribute('width', vw);
+    svg.setAttribute('height', vh);
+    svg.innerHTML = parts.concat(etiquettes).join('');
   }
 
   function wireZone(root) {
     const el = root.querySelector('.zone');
     if (!el) return;
-    el.querySelector('.zone-toggle').addEventListener('click', () => {
-      el.classList.toggle('vue-ensemble');
+    const d = JSON.parse(el.dataset.zone);
+    const view = el.querySelector('.zone-view');
+    const img = el.querySelector('.zone-img');
+
+    const zoomer = (fact, cx, cy) => {
+      const st = zoneEtat.get(el);
+      if (!st) return;
+      const vw = view.clientWidth, vh = view.clientHeight;
+      const px = cx === undefined ? vw / 2 : cx;
+      const py = cy === undefined ? vh / 2 : cy;
+      const k2 = Math.max(st.base * 0.9, Math.min(st.base * 6, st.k * fact));
+      // On agrandit autour du doigt : le pixel visé ne bouge pas.
+      st.tx = px - (px - st.tx) * (k2 / st.k);
+      st.ty = py - (py - st.ty) * (k2 / st.k);
+      st.k = k2;
+      layoutZone(root);
+    };
+
+    el.querySelectorAll('.zone-btn').forEach((b) => {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const mode = b.dataset.zoom;
+        if (mode === 'fit') {
+          zoneEtat.set(el, Object.assign(zoneFit(el, d, view.clientWidth, view.clientHeight),
+            { base: zoneFit(el, d, view.clientWidth, view.clientHeight).k }));
+          layoutZone(root);
+        } else zoomer(mode === 'in' ? 1.5 : 1 / 1.5);
+      });
+    });
+
+    // Doigt : un doigt déplace, deux doigts agrandissent. Les événements sont
+    // arrêtés ici, sinon la fiche défile sous la planche.
+    let pts = new Map(), lastD = 0, lastC = null;
+    const rect = () => view.getBoundingClientRect();
+    view.addEventListener('touchstart', (e) => {
+      const r = rect();
+      pts.clear();
+      Array.from(e.touches).forEach((t) => pts.set(t.identifier, { x: t.clientX - r.left, y: t.clientY - r.top }));
+      lastD = 0; lastC = null;
+      if (e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
+    view.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const st = zoneEtat.get(el);
+      if (!st) return;
+      const r = rect();
+      const now = Array.from(e.touches).map((t) => ({ id: t.identifier, x: t.clientX - r.left, y: t.clientY - r.top }));
+      if (now.length === 1) {
+        const p = pts.get(now[0].id);
+        if (p) { st.tx += now[0].x - p.x; st.ty += now[0].y - p.y; layoutZone(root); }
+      } else if (now.length >= 2) {
+        const dist = Math.hypot(now[0].x - now[1].x, now[0].y - now[1].y);
+        const cx = (now[0].x + now[1].x) / 2, cy = (now[0].y + now[1].y) / 2;
+        if (lastD) {
+          const st2 = zoneEtat.get(el);
+          const k2 = Math.max(st2.base * 0.9, Math.min(st2.base * 6, st2.k * (dist / lastD)));
+          st2.tx = cx - (cx - st2.tx) * (k2 / st2.k) + (lastC ? cx - lastC.x : 0);
+          st2.ty = cy - (cy - st2.ty) * (k2 / st2.k) + (lastC ? cy - lastC.y : 0);
+          st2.k = k2;
+          layoutZone(root);
+        }
+        lastD = dist; lastC = { x: cx, y: cy };
+      }
+      pts.clear();
+      now.forEach((p) => pts.set(p.id, p));
+    }, { passive: false });
+    view.addEventListener('touchend', () => { pts.clear(); lastD = 0; lastC = null; });
+
+    // Souris, pour l'usage sur ordinateur.
+    let drag = null;
+    view.addEventListener('mousedown', (e) => { drag = { x: e.clientX, y: e.clientY }; e.preventDefault(); });
+    window.addEventListener('mousemove', (e) => {
+      if (!drag) return;
+      const st = zoneEtat.get(el);
+      st.tx += e.clientX - drag.x; st.ty += e.clientY - drag.y;
+      drag = { x: e.clientX, y: e.clientY };
       layoutZone(root);
     });
-    const img = el.querySelector('.zone-img');
+    window.addEventListener('mouseup', () => { drag = null; });
+    view.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const r = rect();
+      zoomer(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+
+    // Toucher un voisin ouvre sa fiche : c'est la façon naturelle de circuler
+    // dans une région. On distingue le tap du déplacement au déplacement même.
+    let depart = null;
+    view.addEventListener('pointerdown', (e) => { depart = { x: e.clientX, y: e.clientY }; });
+    view.addEventListener('pointerup', (e) => {
+      if (!depart) return;
+      const bouge = Math.hypot(e.clientX - depart.x, e.clientY - depart.y);
+      depart = null;
+      if (bouge > 6) return;
+      const cible = document.elementFromPoint(e.clientX, e.clientY);
+      const id = cible && cible.getAttribute && cible.getAttribute('data-pt');
+      if (id) ouvrirPoint(id);
+    });
+
     if (img.complete) layoutZone(root);
     else img.addEventListener('load', () => layoutZone(root));
     requestAnimationFrame(() => layoutZone(root));
+    window.addEventListener('resize', () => layoutZone(root));
+  }
+
+  // Retrouve un point par son code, quel que soit son canal.
+  function chercherPoint(id) {
+    for (const m of MERIDIANS) {
+      const p = m.points.find((pt) => pt.id === id);
+      if (p) return { meridian: m, point: p };
+    }
+    return null;
+  }
+  function ouvrirPoint(id, side, garderFocus) {
+    const f = chercherPoint(id);
+    if (!f) return;
+    const cote = side || (f.meridian.bilateral ? (selectedAcupoint ? selectedAcupoint.side : 'R') : 'C');
+    if (!garderFocus) focusPoints = null;
+    showPointInfo(f.meridian, f.point, cote);
+    focusOnPosition(POINTS_3D[id] || f.point.pos);
   }
 
   function dismissHint() {
@@ -215,6 +414,10 @@
   let selectedMeridianId = null;
   let selectedAcupoint = null;
 
+  // Un protocole, une liste de favoris ou une question de révision met en avant
+  // un ensemble de points qui n'appartiennent pas au même canal. Tant qu'il est
+  // posé, c'est lui qui décide de ce qui brille.
+  let focusPoints = null;
   function isMeridianActive(id) { return !selectedMeridianId || selectedMeridianId === id; }
   function isOrganActive(key) {
     if (!selectedMeridianId) return null; // null = état neutre
@@ -244,6 +447,7 @@
 
   function toggleMeridian(id) {
     dismissHint();
+    focusPoints = null;
     if (selectedMeridianId === id) {
       selectedMeridianId = null;
       highlightChip(null);
@@ -266,9 +470,11 @@
       <div class="meta-row">
         <span class="meta"><span class="k">Élément</span><span class="v">${meridian.element}</span></span>
         <span class="meta"><span class="k">Organe</span><span class="v">${meridian.organ}</span></span>
+        ${meridian.heure ? `<span class="meta"><span class="k">Heure</span><span class="v">${meridian.heure}</span></span>` : ''}
         <span class="meta"><span class="k">Points</span><span class="v">${meridian.points.length}</span></span>
       </div>
       <p>${meridian.description}</p>
+      ${relationsElement(meridian)}
       <div class="section-label">Points du canal</div>
       <div class="point-list">
         ${meridian.points.map((p) => `<button class="point-chip" data-point="${p.id}"><span class="code">${p.id}</span>${p.name}</button>`).join('')}
@@ -293,13 +499,19 @@
     infoTitle.innerHTML = `<span class="code">${point.id}</span>${point.name}`;
     infoSub.textContent = `« ${point.trad} »`;
     const sideLabel = side === 'L' ? 'Côté gauche' : side === 'R' ? 'Côté droit' : 'Ligne médiane';
+    const rep = (typeof REPERAGE !== 'undefined' && REPERAGE[point.id]) || {};
     infoBody.innerHTML = `
       <div class="meta-row">
         <span class="meta"><span class="k">Canal</span><span class="v">${meridian.name}</span></span>
         <span class="meta"><span class="k">Organe</span><span class="v">${meridian.organ}</span></span>
         <span class="meta"><span class="k">Côté</span><span class="v">${sideLabel}</span></span>
+        <button class="meta fav${estFavori(point.id) ? ' on' : ''}" data-fav="${point.id}">
+          <span class="k">${estFavori(point.id) ? '★' : '☆'}</span><span class="v">Favori</span></button>
       </div>
       ${buildZoneView(point.id, side)}
+      ${rep.loc ? `<div class="section-label">Localisation</div><p>${rep.loc}</p>` : ''}
+      ${rep.trouver ? `<div class="section-label">Comment le trouver</div><p>${rep.trouver}</p>` : ''}
+      ${rep.prudence ? `<p class="prudence"><b>Prudence.</b> ${rep.prudence}</p>` : ''}
       <div class="section-label">Indications principales</div>
       <p>${point.info}</p>
       <div class="section-label">Autres points du canal ${meridian.id}</div>
@@ -308,6 +520,12 @@
       </div>
       <p class="disclaimer">${DISCLAIMER}</p>
     `;
+    const btnFav = infoBody.querySelector('[data-fav]');
+    if (btnFav) btnFav.addEventListener('click', () => {
+      basculerFavori(point.id);
+      btnFav.classList.toggle('on', estFavori(point.id));
+      btnFav.querySelector('.k').textContent = estFavori(point.id) ? '★' : '☆';
+    });
     infoBody.querySelectorAll('.point-chip').forEach((btn) => {
       btn.addEventListener('click', () => {
         const p = meridian.points.find((pt) => pt.id === btn.dataset.point);
@@ -317,6 +535,198 @@
     });
     wireZone(infoBody);
     requestAnimationFrame(() => updateSceneShift(true));
+  }
+
+  // ---------------------------------------------------------------
+  // Les cinq éléments
+  // ---------------------------------------------------------------
+  // Chaque élément en engendre un et en contrôle un autre. C'est la grammaire
+  // de la médecine chinoise : elle dit pourquoi on traite le Rein pour un
+  // problème de Foie, ou la Rate pour un excès d'Humidité.
+  const ENGENDRE = { Bois: 'Feu', Feu: 'Terre', Terre: 'Métal', 'Métal': 'Eau', Eau: 'Bois' };
+  const CONTROLE = { Bois: 'Terre', Terre: 'Eau', Eau: 'Feu', Feu: 'Métal', 'Métal': 'Bois' };
+  const COULEUR_ELEMENT = { Bois: '#2ecc71', Feu: '#e74c3c', Terre: '#f4a836', 'Métal': '#c9d1d9', Eau: '#4a6fd9' };
+
+  function relationsElement(meridian) {
+    const e = meridian.element;
+    if (!ENGENDRE[e]) return '';
+    const canaux = (el) => MERIDIANS.filter((m) => m.element === el).map((m) => m.name).join(', ');
+    return `
+      <div class="section-label">Cycle des cinq éléments</div>
+      <div class="elem-row">
+        <span class="elem" style="--c:${COULEUR_ELEMENT[e]}">${e}</span>
+        <span class="elem-fleche">engendre</span>
+        <span class="elem" style="--c:${COULEUR_ELEMENT[ENGENDRE[e]]}">${ENGENDRE[e]}</span>
+      </div>
+      <div class="elem-row">
+        <span class="elem" style="--c:${COULEUR_ELEMENT[e]}">${e}</span>
+        <span class="elem-fleche">contrôle</span>
+        <span class="elem" style="--c:${COULEUR_ELEMENT[CONTROLE[e]]}">${CONTROLE[e]}</span>
+      </div>
+      <p class="hint">${e} : ${canaux(e)}. Nourri par ${Object.keys(ENGENDRE).find((k) => ENGENDRE[k] === e)}.</p>`;
+  }
+
+  // ---------------------------------------------------------------
+  // Protocoles
+  // ---------------------------------------------------------------
+  function ouvrirPanneau(titre, sousTitre, html) {
+    dismissHint();
+    selectedAcupoint = null;
+    infoPanel.classList.add('open');
+    infoTitle.innerHTML = titre;
+    infoSub.textContent = sousTitre;
+    infoBody.innerHTML = html;
+    requestAnimationFrame(() => updateSceneShift(true));
+  }
+
+  function montrerProtocoles() {
+    focusPoints = null;
+    selectedMeridianId = null;
+    highlightChip(null);
+    setAccent(null);
+    ouvrirPanneau('Protocoles', 'Associations de points par motif', `
+      <p class="hint">Choisissez un motif : les points s'allument sur le corps.</p>
+      <div class="liste-proto">
+        ${PROTOCOLES.map((pr) => `<button class="proto-chip" data-proto="${pr.id}">
+            <b>${pr.nom}</b><small>${pr.points.join(' · ')}</small></button>`).join('')}
+      </div>
+      <p class="disclaimer">${DISCLAIMER}</p>`);
+    infoBody.querySelectorAll('[data-proto]').forEach((b) => {
+      b.addEventListener('click', () => montrerProtocole(PROTOCOLES.find((x) => x.id === b.dataset.proto)));
+    });
+  }
+
+  function montrerProtocole(pr) {
+    if (!pr) return;
+    focusPoints = new Set(pr.points);
+    selectedMeridianId = null;
+    highlightChip(null);
+    setAccent('#e0a458');
+    ouvrirPanneau(pr.nom, pr.points.length + ' points', `
+      <p>${pr.conseil}</p>
+      ${pr.prudence ? `<p class="prudence"><b>Prudence.</b> ${pr.prudence}</p>` : ''}
+      <div class="section-label">Les points, dans l'ordre</div>
+      <div class="point-list">
+        ${pr.points.map((id) => {
+          const f = chercherPoint(id);
+          return `<button class="point-chip" data-point="${id}"><span class="code">${id}</span>${f ? f.point.name : ''}</button>`;
+        }).join('')}
+      </div>
+      <div class="section-label">Comment presser</div>
+      <p>Pression perpendiculaire à la peau, ferme mais supportable, jusqu'à sentir une lourdeur sourde — le « de qi ». Un à deux minutes par point, des deux côtés, en respirant lentement.</p>
+      <p><button class="btn-large" data-retour="1">← Tous les protocoles</button></p>
+      <p class="disclaimer">${DISCLAIMER}</p>`);
+    infoBody.querySelectorAll('.point-chip').forEach((b) => {
+      b.addEventListener('click', () => ouvrirPoint(b.dataset.point, undefined, true));
+    });
+    const r = infoBody.querySelector('[data-retour]');
+    if (r) r.addEventListener('click', montrerProtocoles);
+  }
+
+  // ---------------------------------------------------------------
+  // Horloge des organes
+  // ---------------------------------------------------------------
+  // Le Qi parcourt les douze canaux en vingt-quatre heures, deux heures chacun.
+  // Un symptôme qui revient toujours à la même heure désigne son canal.
+  function montrerHorloge() {
+    focusPoints = null;
+    const ordre = ['LU', 'LI', 'ST', 'SP', 'HT', 'SI', 'BL', 'KI', 'PC', 'TE', 'GB', 'LR'];
+    const h = new Date().getHours();
+    const creneau = Math.floor(((h + 1) % 24) / 2);           // 3 h–5 h = créneau 0
+    const courant = ordre[(creneau + 11) % 12];
+    ouvrirPanneau('Horloge des organes', 'Le Qi fait le tour en 24 heures', `
+      <p class="hint">Il est ${String(h).padStart(2, '0')} h : le canal actif est en surbrillance.</p>
+      <div class="horloge">
+        ${ordre.map((id) => {
+          const m = MERIDIANS.find((x) => x.id === id);
+          return `<button class="heure-chip${id === courant ? ' actif' : ''}" data-mer="${id}">
+            <span class="heure-h">${m.heure}</span>
+            <span class="heure-n"><i style="background:${m.color}"></i>${m.name}</span></button>`;
+        }).join('')}
+      </div>
+      <p class="hint">Se réveiller toujours à la même heure, une douleur qui revient au même moment : l'horloge indique le canal à interroger. L'organe est à son maximum sur son créneau, et à son minimum douze heures plus tard.</p>`);
+    infoBody.querySelectorAll('[data-mer]').forEach((b) => {
+      b.addEventListener('click', () => toggleMeridian(b.dataset.mer));
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // Révision
+  // ---------------------------------------------------------------
+  let quizScore = { bon: 0, total: 0 };
+  function montrerQuiz() {
+    const avecPlanche = allPointsFlat.filter(({ point }) => PLATE_POINTS[point.id]);
+    const cible = avecPlanche[Math.floor(Math.random() * avecPlanche.length)];
+    // Trois leurres pris de préférence sur la même planche : reconnaître un
+    // point parmi ses voisins est autrement plus instructif que de le
+    // distinguer d'un point situé à l'autre bout du corps.
+    const meme = avecPlanche.filter(({ point }) =>
+      point.id !== cible.point.id && PLATE_POINTS[point.id].planche === PLATE_POINTS[cible.point.id].planche);
+    const autres = avecPlanche.filter(({ point }) => point.id !== cible.point.id);
+    const pioche = (meme.length >= 3 ? meme : autres).slice();
+    const leurres = [];
+    while (leurres.length < 3 && pioche.length) {
+      leurres.push(pioche.splice(Math.floor(Math.random() * pioche.length), 1)[0]);
+    }
+    const choix = leurres.concat([cible]).sort(() => Math.random() - 0.5);
+
+    focusPoints = new Set([cible.point.id]);
+    selectedMeridianId = null;
+    highlightChip(null);
+    setAccent('#7ec8e3');
+    ouvrirPanneau('Réviser', `Score : ${quizScore.bon} / ${quizScore.total}`, `
+      <p class="hint">Quel est ce point ?</p>
+      ${buildZoneView(cible.point.id, 'R', { muet: true })}
+      <div class="point-list quiz-choix">
+        ${choix.map((c) => `<button class="point-chip" data-rep="${c.point.id}"><span class="code">${c.point.id}</span>${c.point.name}</button>`).join('')}
+      </div>
+      <div class="quiz-verdict"></div>`);
+    wireZone(infoBody);
+    focusOnPosition(POINTS_3D[cible.point.id] || cible.point.pos);
+    const verdict = infoBody.querySelector('.quiz-verdict');
+    infoBody.querySelectorAll('[data-rep]').forEach((b) => {
+      b.addEventListener('click', () => {
+        if (b.closest('.quiz-choix').classList.contains('repondu')) return;
+        b.closest('.quiz-choix').classList.add('repondu');
+        const juste = b.dataset.rep === cible.point.id;
+        quizScore.total++;
+        if (juste) quizScore.bon++;
+        infoBody.querySelectorAll('[data-rep]').forEach((x) => {
+          if (x.dataset.rep === cible.point.id) x.classList.add('juste');
+          else if (x === b) x.classList.add('faux');
+        });
+        const rep = (typeof REPERAGE !== 'undefined' && REPERAGE[cible.point.id]) || {};
+        verdict.innerHTML = `
+          <p><b>${cible.point.id} ${cible.point.name}</b> — ${cible.meridian.name}.</p>
+          ${rep.loc ? `<p>${rep.loc}</p>` : ''}
+          <p><button class="btn-large" data-suivant="1">Question suivante →</button></p>`;
+        verdict.querySelector('[data-suivant]').addEventListener('click', montrerQuiz);
+        infoSub.textContent = `Score : ${quizScore.bon} / ${quizScore.total}`;
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // Favoris
+  // ---------------------------------------------------------------
+  function montrerFavoris() {
+    focusPoints = favoris.length ? new Set(favoris) : null;
+    selectedMeridianId = null;
+    highlightChip(null);
+    setAccent('#e6c07b');
+    ouvrirPanneau('Favoris', favoris.length + ' point' + (favoris.length > 1 ? 's' : ''), favoris.length ? `
+      <div class="point-list">
+        ${favoris.map((id) => {
+          const f = chercherPoint(id);
+          return f ? `<button class="point-chip" data-point="${id}"><span class="code">${id}</span>${f.point.name}</button>` : '';
+        }).join('')}
+      </div>
+      <p class="hint">L'étoile de chaque fiche ajoute ou retire un point de cette liste. Elle reste enregistrée sur cet appareil.</p>` : `
+      <p>Aucun favori pour l'instant.</p>
+      <p class="hint">Ouvrez la fiche d'un point et touchez l'étoile pour le retrouver ici.</p>`);
+    infoBody.querySelectorAll('.point-chip').forEach((b) => {
+      b.addEventListener('click', () => ouvrirPoint(b.dataset.point, undefined, true));
+    });
   }
 
   function hideInfoPanel() {
@@ -334,13 +744,23 @@
 
   btnAll.addEventListener('click', () => {
     selectedMeridianId = null;
+    focusPoints = null;
     highlightChip(null);
     setAccent(null);
     hideInfoPanel();
   });
+  btnProtocoles.addEventListener('click', montrerProtocoles);
+  btnHorloge.addEventListener('click', montrerHorloge);
+  btnQuiz.addEventListener('click', montrerQuiz);
+  btnFavoris.addEventListener('click', montrerFavoris);
 
-  function focusOnPosition(pos) {
+  // On amène la caméra en face du point : sans cela, choisir un point du dos ne
+  // change rien à l'écran et l'on ne voit pas où il tombe.
+  function focusOnPosition(pos, rayon) {
     engine.camera.target = [0, pos[1], 0];
+    const r = Math.hypot(pos[0], pos[2]);
+    if (r > 0.03) engine.camera.theta = Math.atan2(pos[0], pos[2]);
+    engine.camera.radius = rayon || 1.9;
   }
 
   function setView(theta) {
@@ -368,9 +788,24 @@
     const q = searchInput.value.trim().toLowerCase();
     searchResults.innerHTML = '';
     if (!q) { searchResults.classList.remove('open'); return; }
-    const matches = allPointsFlat.filter(({ point }) =>
-      point.id.toLowerCase().includes(q) || point.name.toLowerCase().includes(q) || point.trad.toLowerCase().includes(q)
-    ).slice(0, 12);
+    // On cherche aussi dans les indications et la localisation : « migraine »,
+    // « nausée », « poignet » doivent trouver les points, pas seulement leur code.
+    const sansAccent = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const qn = sansAccent(q);
+    const score = ({ meridian, point }) => {
+      const rep = (typeof REPERAGE !== 'undefined' && REPERAGE[point.id]) || {};
+      if (sansAccent(point.id).startsWith(qn)) return 0;
+      if (sansAccent(point.name).includes(qn) || sansAccent(point.trad).includes(qn)) return 1;
+      if (sansAccent(meridian.name).includes(qn)) return 2;
+      if (sansAccent(point.info || '').includes(qn)) return 3;
+      if (sansAccent((rep.loc || '') + ' ' + (rep.trouver || '')).includes(qn)) return 4;
+      return 99;
+    };
+    const matches = allPointsFlat.map((e) => ({ e, s: score(e) }))
+      .filter((x) => x.s < 99)
+      .sort((a, b) => a.s - b.s)
+      .slice(0, 14)
+      .map((x) => x.e);
     if (matches.length === 0) { searchResults.classList.remove('open'); return; }
     searchResults.classList.add('open');
     matches.forEach(({ meridian, point }) => {
@@ -378,6 +813,7 @@
       item.className = 'search-item';
       item.innerHTML = `<span class="dot" style="background:${meridian.color}"></span><span class="code">${point.id}</span> ${point.name} <small>${meridian.name}</small>`;
       item.addEventListener('click', () => {
+        focusPoints = null;
         selectedMeridianId = meridian.id;
         highlightChip(meridian.id);
         showPointInfo(meridian, point, 'R');
@@ -435,11 +871,11 @@
 
   function meridianStyle(id) {
     const selected = selectedMeridianId === id;
-    const neutral = !selectedMeridianId;
+    const neutral = !selectedMeridianId && !focusPoints;
     const m = MERIDIANS.find((mm) => mm.id === id);
     return {
       color: hexToUnit(m.color),
-      alpha: selected ? 1 : neutral ? 0.55 : 0.07,
+      alpha: selected ? 1 : neutral ? 0.55 : focusPoints ? 0.05 : 0.07,
       glow: selected ? 0.25 : 0,
     };
   }
@@ -448,7 +884,7 @@
   function collectPoints(t) {
     pointDraws.length = 0;
     acupoints.forEach((ap) => {
-      const active = isMeridianActive(ap.meridian.id);
+      const active = focusPoints ? focusPoints.has(ap.point.id) : isMeridianActive(ap.meridian.id);
       const isSelected = selectedAcupoint
         && selectedAcupoint.point.id === ap.point.id
         && selectedAcupoint.side === ap.side;
@@ -458,12 +894,13 @@
       // et l'on ne distingue plus lequel on vise.
       const serre = ap.pos[1] > 1.50 || ap.pos[1] < 0.16 || Math.abs(ap.pos[0]) > 0.40;
       const ech = serre ? 0.6 : 1;
+      const enAvant = focusPoints && focusPoints.has(ap.point.id);
       pointDraws.push({
         pos: ap.pos,
         color: ap.color,
-        radius: (isSelected ? 0.016 : active ? 0.0105 : 0.006) * ech,
-        alpha: active ? 1 : 0.28,
-        glow: isSelected ? 0.8 : active ? pulse * 0.5 : 0,
+        radius: (isSelected || enAvant ? 0.016 : active ? 0.0105 : 0.006) * ech,
+        alpha: active ? 1 : 0.22,
+        glow: isSelected ? 0.8 : enAvant ? 0.55 + pulse * 0.3 : active ? pulse * 0.5 : 0,
       });
     });
     return pointDraws;

@@ -9,7 +9,7 @@
 
 const MERIDIANS = [
   {
-    id: 'LU', color: '#7ec8e3', bilateral: true,
+    id: 'LU', color: '#7ec8e3', bilateral: true, heure: '3 h – 5 h',
     name: 'Poumon', namePinyin: 'Fei Jing', element: 'Métal', yinYang: 'Yin (Bras)',
     organ: 'Poumons', organKey: 'lungs',
     description: "Gouverne le Qi et la respiration, régule les liquides organiques et la peau. En lien avec le Gros Intestin.",
@@ -24,7 +24,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'LI', color: '#4a90d9', bilateral: true,
+    id: 'LI', color: '#4a90d9', bilateral: true, heure: '5 h – 7 h',
     name: 'Gros Intestin', namePinyin: 'Da Chang Jing', element: 'Métal', yinYang: 'Yang (Bras)',
     organ: 'Gros Intestin', organKey: 'largeIntestine',
     description: "Élimination, transit intestinal. Contrôle la peau et le nez avec le Poumon.",
@@ -39,7 +39,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'ST', color: '#f4a836', bilateral: true,
+    id: 'ST', color: '#f4a836', bilateral: true, heure: '7 h – 9 h',
     name: 'Estomac', namePinyin: 'Wei Jing', element: 'Terre', yinYang: 'Yang (Jambe)',
     organ: 'Estomac', organKey: 'stomach',
     description: "Réception et décomposition des aliments (avec la Rate). Source du Qi et du Sang post-natal.",
@@ -56,7 +56,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'SP', color: '#f2c94c', bilateral: true,
+    id: 'SP', color: '#f2c94c', bilateral: true, heure: '9 h – 11 h',
     name: 'Rate', namePinyin: 'Pi Jing', element: 'Terre', yinYang: 'Yin (Jambe)',
     organ: 'Rate / Pancréas', organKey: 'spleen',
     description: "Transforme et transporte les aliments, contrôle le Sang et les muscles. Origine du Qi post-natal.",
@@ -70,7 +70,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'HT', color: '#e74c3c', bilateral: true,
+    id: 'HT', color: '#e74c3c', bilateral: true, heure: '11 h – 13 h',
     name: 'Cœur', namePinyin: 'Xin Jing', element: 'Feu', yinYang: 'Yin (Bras)',
     organ: 'Cœur', organKey: 'heart',
     description: "Abrite le Shen (esprit/conscience), gouverne le Sang et les vaisseaux.",
@@ -83,7 +83,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'SI', color: '#ff6f91', bilateral: true,
+    id: 'SI', color: '#ff6f91', bilateral: true, heure: '13 h – 15 h',
     name: 'Intestin Grêle', namePinyin: 'Xiao Chang Jing', element: 'Feu', yinYang: 'Yang (Bras)',
     organ: 'Intestin Grêle', organKey: 'smallIntestine',
     description: "Sépare le pur de l'impur dans la digestion. Lié au Cœur.",
@@ -97,7 +97,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'BL', color: '#2c3e91', bilateral: true,
+    id: 'BL', color: '#2c3e91', bilateral: true, heure: '15 h – 17 h',
     name: 'Vessie', namePinyin: 'Pang Guang Jing', element: 'Eau', yinYang: 'Yang (Jambe)',
     organ: 'Vessie', organKey: 'bladder',
     description: "Le plus long méridien : longe tout le dos, porte les points Shu du dos reliés à chaque organe. Élimination des liquides.",
@@ -118,7 +118,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'KI', color: '#1b2a4a', bilateral: true,
+    id: 'KI', color: '#1b2a4a', bilateral: true, heure: '17 h – 19 h',
     name: 'Rein', namePinyin: 'Shen Jing', element: 'Eau', yinYang: 'Yin (Jambe)',
     organ: 'Reins', organKey: 'kidneys',
     description: "Réserve l'essence (Jing), racine du Yin et du Yang du corps, contrôle les os et la reproduction.",
@@ -131,7 +131,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'PC', color: '#a66bbe', bilateral: true,
+    id: 'PC', color: '#a66bbe', bilateral: true, heure: '19 h – 21 h',
     name: 'Maître du Cœur', namePinyin: 'Xin Bao Jing', element: 'Feu', yinYang: 'Yin (Bras)',
     organ: 'Péricarde', organKey: 'pericardium',
     description: "Protège le Cœur, régule la circulation et les émotions ; impliqué dans la sexualité et le système circulatoire.",
@@ -144,7 +144,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'TE', color: '#d98cd9', bilateral: true,
+    id: 'TE', color: '#d98cd9', bilateral: true, heure: '21 h – 23 h',
     name: 'Triple Réchauffeur', namePinyin: 'San Jiao Jing', element: 'Feu', yinYang: 'Yang (Bras)',
     organ: 'San Jiao (fonction, non organe anatomique)', organKey: 'tripleWarmer',
     description: "Concept fonctionnel régulant les échanges d'eau et d'énergie entre les 3 foyers (thoracique, épigastrique, pelvien).",
@@ -157,7 +157,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'GB', color: '#2ecc71', bilateral: true,
+    id: 'GB', color: '#2ecc71', bilateral: true, heure: '23 h – 1 h',
     name: 'Vésicule Biliaire', namePinyin: 'Dan Jing', element: 'Bois', yinYang: 'Yang (Jambe)',
     organ: 'Vésicule Biliaire', organKey: 'gallbladder',
     description: "Stocke la bile, gouverne la prise de décision et les tendons. Trajet sinueux sur le côté du corps.",
@@ -173,7 +173,7 @@ const MERIDIANS = [
     ],
   },
   {
-    id: 'LR', color: '#27ae60', bilateral: true,
+    id: 'LR', color: '#27ae60', bilateral: true, heure: '1 h – 3 h',
     name: 'Foie', namePinyin: 'Gan Jing', element: 'Bois', yinYang: 'Yin (Jambe)',
     organ: 'Foie', organKey: 'liver',
     description: "Assure la libre circulation du Qi, stocke le Sang, gouverne les tendons et les émotions (colère/frustration).",

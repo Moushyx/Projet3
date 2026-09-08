@@ -29,7 +29,7 @@ const EMBEDDED_BODY_MODEL = "${modelB64}";
 const EMBEDDED_PLATES = ${JSON.stringify(planches)};`;
 
 const scripts = [embedded].concat(
-  ['js/vec3.js', 'js/data.js', 'js/points-3d.js', 'js/plates.js', 'js/geometry.js',
+  ['js/vec3.js', 'js/data.js', 'js/reperage.js', 'js/protocoles.js', 'js/points-3d.js', 'js/plates.js', 'js/geometry.js',
    'js/model.js', 'js/renderer-gl.js', 'js/engine.js', 'js/app.js']
     .map((f) => `/* ===== ${f} ===== */\n${read(f)}`)
 ).join('\n\n');

@@ -263,7 +263,8 @@ header {
 
 /* ---------- Vue 2D de la zone ---------- */
 /* La planche est une vue orthographique du même modèle que la scène 3D : les
-   repères y tombent donc exactement où ils doivent. */
+   repères y tombent donc exactement où ils doivent. Elle s'affiche entière,
+   comme une planche d'atlas, et se laisse agrandir au doigt. */
 .zone {
   margin: 2px 0 14px;
   border: 1px solid var(--line);
@@ -273,60 +274,149 @@ header {
 }
 .zone-head {
   display: flex; align-items: center; gap: 10px;
-  padding: 7px 10px;
+  padding: 7px 8px 7px 10px;
   background: var(--ink-3);
   border-bottom: 1px solid var(--line);
 }
 .zone-nom {
   font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.zone-toggle {
-  margin-left: auto;
-  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 4px 8px; border-radius: 6px;
+.zone-zoom { margin-left: auto; display: flex; gap: 4px; flex: 0 0 auto; }
+.zone-btn {
+  width: 30px; height: 26px; border-radius: 6px;
   border: 1px solid var(--line); background: var(--ink-2); color: var(--muted);
+  font-size: 14px; line-height: 1; padding: 0;
 }
-.zone-toggle:active { color: var(--text); border-color: var(--accent); }
+.zone-btn:active { color: var(--text); border-color: var(--accent); }
 
 .zone-view {
   position: relative;
-  height: 230px;
+  height: 340px;
   overflow: hidden;
   background: #f4f2ee;
+  touch-action: none;
+  cursor: grab;
 }
+.zone-view:active { cursor: grabbing; }
 .zone-img {
   position: absolute; top: 0; left: 0;
-  image-rendering: auto;
   user-select: none; -webkit-user-drag: none;
 }
-.zone-marks { position: absolute; inset: 0; pointer-events: none; }
+.zone-svg { position: absolute; inset: 0; pointer-events: none; }
+.zone-svg .pt-hit { fill: transparent; pointer-events: auto; cursor: pointer; }
 
-.zone-mark {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  display: flex; align-items: center; gap: 4px;
-  white-space: nowrap;
+/* Cotes : trait fin, embouts perpendiculaires, valeur en cun. */
+.zone-svg .cote { stroke: #b4453c; stroke-width: 1.2; }
+.zone-svg .cote-pt { fill: #b4453c; }
+.zone-svg .cote-txt {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  fill: #a13b33; paint-order: stroke; stroke: rgba(244,242,238,0.9); stroke-width: 3px;
 }
-.zone-mark i {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: #6b7280; border: 1.5px solid #f4f2ee;
-  flex: 0 0 auto;
+.zone-svg .cote-src {
+  font-family: var(--font-body); font-size: 9.5px;
+  fill: #6b7280; paint-order: stroke; stroke: rgba(244,242,238,0.9); stroke-width: 3px;
 }
-.zone-mark b {
-  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
-  color: #4b5563; background: rgba(244,242,238,0.82);
-  padding: 0 2px; border-radius: 3px;
+
+/* Points : les voisins en gris, le point choisi en rouge. */
+.zone-svg .pt { fill: #8b93a1; stroke: #f4f2ee; stroke-width: 1.5; }
+.zone-svg .pt-txt {
+  font-family: var(--font-mono); font-size: 10px; fill: #4b5563;
+  paint-order: stroke; stroke: rgba(244,242,238,0.85); stroke-width: 3px;
 }
-.zone-mark.actif { z-index: 2; transform: translate(-50%, -50%) scale(1.35); }
-.zone-mark.actif i {
-  background: var(--accent);
-  border-color: #1b2536;
-  box-shadow: 0 0 0 3px rgba(217, 195, 165, 0.45);
+.zone-svg .pt-actif { fill: #d92d20; stroke: #f4f2ee; stroke-width: 2; }
+.zone-svg .pt-actif-halo { fill: rgba(217,45,32,0.16); }
+.zone-svg .pt-actif-txt {
+  font-family: var(--font-mono); font-size: 13px; font-weight: 700; fill: #b42318;
+  paint-order: stroke; stroke: rgba(244,242,238,0.92); stroke-width: 4px;
 }
-.zone-mark.actif b { color: #111827; background: rgba(244,242,238,0.95); font-size: 10px; }
+
+.zone-pied {
+  padding: 6px 10px 7px;
+  background: var(--ink-3);
+  border-top: 1px solid var(--line);
+  font-size: 10.5px; color: var(--muted);
+}
 
 @media (min-width: 760px) {
-  .zone-view { height: 280px; }
+  .zone-view { height: 420px; }
 }
+
+/* ---------- Barre d'outils : plus de deux entrées, elle défile ---------- */
+#legend-toolbar {
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-wrap: nowrap;
+}
+#legend-toolbar::-webkit-scrollbar { display: none; }
+#legend-toolbar button { flex: 0 0 auto; }
+
+/* ---------- Favori ---------- */
+.meta.fav { cursor: pointer; }
+.meta.fav .k { font-size: 12px; letter-spacing: 0; }
+.meta.fav.on { border-color: #e6c07b; }
+.meta.fav.on .k { color: #e6c07b; }
+
+/* ---------- Avertissements ---------- */
+.prudence {
+  border-left: 2px solid #d98c5f;
+  padding: 6px 0 6px 10px;
+  color: #f0d6c2;
+  background: rgba(217, 140, 95, 0.07);
+  border-radius: 0 6px 6px 0;
+}
+
+/* ---------- Cinq éléments ---------- */
+.elem-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.elem {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  padding: 4px 9px; border-radius: 6px;
+  color: var(--c); border: 1px solid var(--c);
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+}
+.elem-fleche { font-size: 11px; color: var(--muted); }
+
+/* ---------- Protocoles ---------- */
+.liste-proto { display: flex; flex-direction: column; gap: 6px; }
+.proto-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  text-align: left; width: 100%;
+  padding: 9px 11px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--ink-3); color: var(--text);
+  font-size: 13.5px;
+}
+.proto-chip small { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.proto-chip:active { border-color: var(--accent); }
+
+.btn-large {
+  width: 100%; padding: 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--ink-3); color: var(--text);
+  font-size: 13px;
+}
+.btn-large:active { border-color: var(--accent); }
+
+/* ---------- Horloge des organes ---------- */
+.horloge { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.heure-chip {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; text-align: left;
+  padding: 7px 11px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--ink-3); color: var(--text);
+  font-size: 13px;
+}
+.heure-chip .heure-h {
+  font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+  min-width: 74px; flex: 0 0 auto;
+}
+.heure-chip .heure-n { display: flex; align-items: center; gap: 7px; }
+.heure-chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.heure-chip.actif { border-color: var(--accent); background: #1c2c46; }
+.heure-chip.actif .heure-h { color: var(--text); }
+
+/* ---------- Révision ---------- */
+.quiz-choix .point-chip { flex: 1 1 44%; justify-content: center; padding: 11px 8px; }
+.quiz-choix.repondu .point-chip { opacity: 0.55; }
+.quiz-choix .point-chip.juste { opacity: 1; border-color: #4ec07b; background: rgba(78,192,123,0.12); }
+.quiz-choix .point-chip.faux { opacity: 1; border-color: #d9534f; background: rgba(217,83,79,0.12); }
+.quiz-verdict { margin-top: 10px; }
