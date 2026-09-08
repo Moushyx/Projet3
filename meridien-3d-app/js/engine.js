@@ -74,32 +74,82 @@ function createEngine(canvas) {
     };
   }
 
-  // ---- Contrôles orbitaux (souris + tactile, y compris pincement) ----
+  // ---- Contrôles : rotation à un doigt, pincement et déplacement à deux ----
   let dragging = false;
   let lastX = 0, lastY = 0;
   let pinchStartDist = 0;
   let pinchStartRadius = 0;
+  let lastMidX = 0, lastMidY = 0;
+  let multiTouchUntil = 0;
   const activePointers = new Map();
 
+  function pointerList() { return Array.from(activePointers.values()); }
+
   function pointerDistance() {
-    const pts = Array.from(activePointers.values());
+    const pts = pointerList();
     if (pts.length < 2) return 0;
     const dx = pts[0].x - pts[1].x, dy = pts[0].y - pts[1].y;
     return Math.sqrt(dx * dx + dy * dy);
   }
 
+  function pointerMidpoint() {
+    const pts = pointerList();
+    if (pts.length < 2) return { x: 0, y: 0 };
+    return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+  }
+
+  // Combien de mètres represente un pixel à la distance du point visé :
+  // sert à faire suivre le doigt exactement lors d'un déplacement.
+  function worldPerPixel() {
+    const usableH = Math.max(160, height - camera.occludedBottom);
+    const f = (usableH / 2) / Math.tan(camera.fov / 2);
+    return camera.radius / f;
+  }
+
+  function panBy(dx, dy) {
+    const basis = getBasis();
+    const k = worldPerPixel();
+    const t = camera.target;
+    const nx = t[0] - basis.x[0] * dx * k + basis.y[0] * dy * k;
+    const ny = t[1] - basis.x[1] * dx * k + basis.y[1] * dy * k;
+    const nz = t[2] - basis.x[2] * dx * k + basis.y[2] * dy * k;
+    // On reste au voisinage du corps, sinon on se perd dans le vide.
+    camera.target = [
+      Math.max(-0.7, Math.min(0.7, nx)),
+      Math.max(-0.1, Math.min(1.95, ny)),
+      Math.max(-0.7, Math.min(0.7, nz)),
+    ];
+  }
+
   canvas.style.touchAction = 'none';
+
+  // Safari sur iOS ignore `touch-action` pour son propre zoom à deux doigts :
+  // sans ces gardes, le pincement agrandit la page au lieu de la scène, et la
+  // rotation qui suit fait glisser la page entière.
+  const swallow = (e) => e.preventDefault();
+  ['touchstart', 'touchmove', 'touchend'].forEach((type) => {
+    canvas.addEventListener(type, swallow, { passive: false });
+  });
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((type) => {
+    canvas.addEventListener(type, swallow, { passive: false });
+    document.addEventListener(type, swallow, { passive: false });
+  });
 
   canvas.addEventListener('pointerdown', (e) => {
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    canvas.setPointerCapture(e.pointerId);
+    // La capture peut échouer (pointeur déjà relâché, événement synthétique) :
+    // ce n'est pas une raison pour abandonner le geste en cours.
+    try { if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId); } catch (err) { /* sans gravité */ }
     if (activePointers.size === 1) {
       dragging = true;
       lastX = e.clientX; lastY = e.clientY;
     } else if (activePointers.size === 2) {
       dragging = false;
+      multiTouchUntil = Date.now() + 600;
       pinchStartDist = pointerDistance();
       pinchStartRadius = camera.radius;
+      const mid = pointerMidpoint();
+      lastMidX = mid.x; lastMidY = mid.y;
     }
   });
 
@@ -108,37 +158,52 @@ function createEngine(canvas) {
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (activePointers.size >= 2) {
+      multiTouchUntil = Date.now() + 600;
       const d = pointerDistance();
       if (pinchStartDist > 10 && d > 10) {
         camera.radius = clampRadius(pinchStartRadius * (pinchStartDist / d));
       }
+      // Deux doigts qui glissent ensemble déplacent la vue : indispensable
+      // une fois zoomé, sinon on ne peut plus atteindre le reste du corps.
+      const mid = pointerMidpoint();
+      panBy(mid.x - lastMidX, mid.y - lastMidY);
+      lastMidX = mid.x; lastMidY = mid.y;
       return;
     }
+
     if (dragging) {
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX; lastY = e.clientY;
-      camera.theta -= dx * 0.008;
-      camera.phi = clampPhi(camera.phi - dy * 0.008);
+      // Plus on est zoomé, plus la rotation est fine : à courte distance,
+      // quelques degrés balaient déjà tout l'écran.
+      const speed = 0.008 * Math.max(0.3, Math.min(1.15, camera.radius / 3));
+      camera.theta -= dx * speed;
+      camera.phi = clampPhi(camera.phi - dy * speed);
     }
   });
 
   function endPointer(e) {
+    if (!activePointers.has(e.pointerId)) return;
     activePointers.delete(e.pointerId);
-    if (activePointers.size < 2) { pinchStartDist = 0; }
-    if (activePointers.size === 0) { dragging = false; }
-    else if (activePointers.size === 1) {
-      const pt = Array.from(activePointers.values())[0];
-      dragging = true; lastX = pt.x; lastY = pt.y;
+    if (activePointers.size < 2) pinchStartDist = 0;
+    if (activePointers.size === 0) {
+      dragging = false;
+    } else if (activePointers.size === 1) {
+      // Un doigt reste après un pincement : on reprend la rotation là où il est,
+      // sans le saut que provoquerait une position périmée.
+      const pt = pointerList()[0];
+      dragging = true;
+      lastX = pt.x; lastY = pt.y;
+      multiTouchUntil = Date.now() + 400;
     }
   }
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
-  canvas.addEventListener('pointerleave', (e) => { if (activePointers.has(e.pointerId)) endPointer(e); });
 
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    camera.radius = clampRadius(camera.radius * (1 + e.deltaY * 0.001));
+    camera.radius = clampRadius(camera.radius * (1 + e.deltaY * 0.0015));
   }, { passive: false });
 
   return {
@@ -147,6 +212,9 @@ function createEngine(canvas) {
     get height() { return height; },
     getCameraPosition, getBasis, project,
     isDragBusy: () => dragging || activePointers.size > 1,
+    // Vrai juste après un geste à deux doigts : évite qu'un relâchement de
+    // doigt soit pris pour un appui sur un point.
+    isMultiTouch: () => activePointers.size > 1 || Date.now() < multiTouchUntil,
   };
 }
 

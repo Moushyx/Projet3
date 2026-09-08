@@ -12,12 +12,17 @@
 
 const SKIN_BASE = [226, 178, 146];
 const SKIN_SHADOW = [74, 52, 58];
+// Les extrémités (mains, pieds, visage) sont plus vascularisées, donc plus chaudes.
+const SKIN_WARM = [232, 166, 138];
 const LIGHT_KEY = { dir: [-0.44, 0.70, 0.62], intensity: 0.62, tint: [255, 246, 232] };
 const LIGHT_FILL = { dir: [0.78, 0.12, -0.42], intensity: 0.30, tint: [150, 180, 225] };
 const AMBIENT = 0.34;
 // Éclairage « enveloppant » : la lumière déborde du terminateur, comme sur une
 // peau. Les écarts entre facettes voisines s'atténuent nettement.
 const WRAP = 0.35;
+// Gouttière du rachis : un léger retrait du rayon au milieu du dos.
+// L'angle 3π/2 correspond à l'arrière de la section.
+const RACHIS = [{ at: Math.PI * 1.5, width: 0.42, depth: 0.055 }];
 
 function buildHumanMesh() {
   const positions = [];
@@ -51,14 +56,25 @@ function buildHumanMesh() {
 
   // Section transversale : super-ellipse d'exposant `exp`
   // (exp = 2 → ellipse ; exp > 2 → ovale aplati, comme un torse).
-  function ringVertices(center, frame, rx, rz, exp, segments) {
+  function ringVertices(center, frame, rx, rz, exp, segments, grooves) {
     const idx = [];
     const p = 2 / exp;
     for (let s = 0; s < segments; s++) {
       const a = (s / segments) * Math.PI * 2;
-      const c = Math.cos(a), si = Math.sin(a);
-      const dx = Math.sign(c) * Math.pow(Math.abs(c), p) * rx;
-      const dz = Math.sign(si) * Math.pow(Math.abs(si), p) * rz;
+      // Sillons (gouttière du rachis, creux du sternum) : un léger retrait du
+      // rayon autour d'un angle donné. C'est ce qui distingue un dos d'un tube.
+      let k = 1;
+      if (grooves) {
+        for (let g = 0; g < grooves.length; g++) {
+          const gr = grooves[g];
+          let da = Math.abs(a - gr.at);
+          if (da > Math.PI) da = Math.PI * 2 - da;
+          k -= gr.depth * Math.exp(-(da / gr.width) * (da / gr.width));
+        }
+      }
+      const c = Math.cos(a) , si = Math.sin(a);
+      const dx = Math.sign(c) * Math.pow(Math.abs(c), p) * rx * k;
+      const dz = Math.sign(si) * Math.pow(Math.abs(si), p) * rz * k;
       idx.push(addVertex([
         center[0] + frame.u[0] * dx + frame.v[0] * dz,
         center[1] + frame.u[1] * dx + frame.v[1] * dz,
@@ -80,28 +96,68 @@ function buildHumanMesh() {
       (pa[1] + pb[1] + pc[1] + pd[1]) / 4,
       (pa[2] + pb[2] + pc[2] + pd[2]) / 4,
     ];
-    faces.push({ a, b, c, d, n: normal, center, color: shade(normal, center), part: currentPart });
+    faces.push({ a, b, c, d, n: normal, center, part: currentPart, forced: !!forcedNormal });
     const acc = parts[currentPart];
     acc.sum[0] += center[0]; acc.sum[1] += center[1]; acc.sum[2] += center[2];
     acc.count++;
   }
 
-  // Couleur figée d'une facette : lumière principale chaude, lumière
-  // d'appoint froide, plus un assombrissement des surfaces tournées vers le sol.
-  function shade(n, center) {
+  // Volumes approchant le corps : servent à estimer l'occlusion ambiante,
+  // c'est-à-dire l'ombre douce des creux (aisselles, aine, sous le menton).
+  const OCCLUDERS = [
+    { c: [0, 1.66, 0], r: 0.105 },   // tête
+    { c: [0, 1.50, 0], r: 0.058 },   // cou
+    { c: [0, 1.33, 0], r: 0.150 },   // haut du tronc
+    { c: [0, 1.16, 0], r: 0.135 },   // abdomen
+    { c: [0, 0.90, 0], r: 0.135 },   // bassin
+    { c: [0.20, 1.30, 0], r: 0.055 }, { c: [-0.20, 1.30, 0], r: 0.055 },  // bras
+    { c: [0.24, 1.02, 0], r: 0.045 }, { c: [-0.24, 1.02, 0], r: 0.045 },  // avant-bras
+    { c: [0.10, 0.76, 0], r: 0.082 }, { c: [-0.10, 0.76, 0], r: 0.082 },  // cuisses
+    { c: [0.09, 0.36, 0], r: 0.055 }, { c: [-0.09, 0.36, 0], r: 0.055 },  // mollets
+  ];
+
+  // Fraction de ciel masquée au point `p` orienté selon `n`.
+  function ambientOcclusion(p, n) {
+    let occ = 0;
+    for (let i = 0; i < OCCLUDERS.length; i++) {
+      const o = OCCLUDERS[i];
+      const dx = o.c[0] - p[0], dy = o.c[1] - p[1], dz = o.c[2] - p[2];
+      const d2 = dx * dx + dy * dy + dz * dz;
+      const d = Math.sqrt(d2);
+      if (d < o.r * 1.05 || d < 1e-4) continue; // le volume qui nous porte
+      const cosT = (n[0] * dx + n[1] * dy + n[2] * dz) / d;
+      if (cosT <= 0) continue; // le volume est derrière la surface
+      occ += (o.r * o.r) / d2 * cosT;
+    }
+    return Math.max(0.42, 1 - occ * 0.55);
+  }
+
+  // Carnation : les extrémités (visage, mains, pieds) tirent vers le chaud.
+  function skinTone(p) {
+    const hands = Math.max(0, (Math.abs(p[0]) - 0.20) / 0.06);
+    const face = Math.max(0, (p[1] - 1.54) / 0.14);
+    const feet = Math.max(0, (0.16 - p[1]) / 0.16);
+    const warm = Math.min(1, hands + face * 0.8 + feet * 0.7);
+    return [0, 1, 2].map((i) => SKIN_BASE[i] + (SKIN_WARM[i] - SKIN_BASE[i]) * warm);
+  }
+
+  // Couleur d'un sommet : lumière principale chaude, lumière d'appoint froide,
+  // occlusion des creux. Tout est figé ici : les lumières ne bougent pas, seule
+  // la caméra tourne, donc rien de tout cela n'est recalculé par image.
+  function shadeVertex(n, p, ao) {
     const key = Math.max(0, (V3.dot(n, V3.normalize(LIGHT_KEY.dir)) + WRAP) / (1 + WRAP));
     const fill = Math.max(0, (V3.dot(n, V3.normalize(LIGHT_FILL.dir)) + WRAP) / (1 + WRAP));
-    const upward = (n[1] + 1) / 2; // 0 = vers le sol, 1 = vers le ciel
-    const occlusion = 0.84 + 0.16 * upward;
-    const lambert = (AMBIENT + LIGHT_KEY.intensity * key) * occlusion;
+    const upward = (n[1] + 1) / 2;
+    const lambert = (AMBIENT * ao + LIGHT_KEY.intensity * key) * (0.86 + 0.14 * upward);
+    const base = skinTone(p);
 
     const out = [0, 0, 1].map((_, i) => {
-      const base = SKIN_BASE[i] * lambert + SKIN_SHADOW[i] * (1 - Math.min(1, lambert)) * 0.5;
-      const keyTint = (LIGHT_KEY.tint[i] / 255) * key * 26;
-      const fillTint = (LIGHT_FILL.tint[i] / 255) * fill * LIGHT_FILL.intensity * 90;
-      return Math.max(0, Math.min(255, Math.round(base + keyTint + fillTint)));
+      const body = base[i] * lambert * ao + SKIN_SHADOW[i] * (1 - Math.min(1, lambert)) * 0.5;
+      const keyTint = (LIGHT_KEY.tint[i] / 255) * key * 26 * ao;
+      const fillTint = (LIGHT_FILL.tint[i] / 255) * fill * LIGHT_FILL.intensity * 90 * ao;
+      return Math.max(0, Math.min(255, Math.round(body + keyTint + fillTint)));
     });
-    return `rgb(${out[0]},${out[1]},${out[2]})`;
+    return out;
   }
 
   // Enfile une suite de sections le long d'un axe.
@@ -114,7 +170,7 @@ function buildHumanMesh() {
       const prev = spine[Math.max(0, i - 1)].p;
       const next = spine[Math.min(spine.length - 1, i + 1)].p;
       const frame = frameFor(V3.sub(next, prev));
-      rings.push(ringVertices(spine[i].p, frame, spine[i].rx, spine[i].rz, spine[i].exp || 2, segments));
+      rings.push(ringVertices(spine[i].p, frame, spine[i].rx, spine[i].rz, spine[i].exp || 2, segments, spine[i].grooves));
     }
     for (let i = 0; i < rings.length - 1; i++) {
       for (let s = 0; s < segments; s++) {
@@ -160,6 +216,7 @@ function buildHumanMesh() {
           rx: Math.max(0.002, ref.rx * Math.cos(t)),
           rz: Math.max(0.002, ref.rz * Math.cos(t)),
           exp: ref.exp || 2,
+          grooves: ref.grooves,
         });
       }
       return rings;
@@ -193,6 +250,7 @@ function buildHumanMesh() {
           rx: Math.max(0.002, cr(a.rx, b.rx, c.rx, d.rx, t)),
           rz: Math.max(0.002, cr(a.rz, b.rz, c.rz, d.rz, t)),
           exp: b.exp || 2,
+          grooves: b.grooves,
         });
       }
     }
@@ -219,7 +277,7 @@ function buildHumanMesh() {
     { p: [0, 1.568, 0.010], rx: 0.046, rz: 0.062, exp: 2.1 },
     { p: [0, 1.552, 0.004], rx: 0.038, rz: 0.046 },
     { p: [0, 1.538, 0.000], rx: 0.033, rz: 0.038 },
-  ], 2), { depth: 0.55 }), 22);
+  ], 2), { depth: 0.55 }), 20);
 
   // Nez et oreilles : la silhouette se lit tout de suite comme une tête.
   addEllipsoid([0, 1.646, 0.095], [0.013, 0.022, 0.019], 10, 6);
@@ -247,18 +305,18 @@ function buildHumanMesh() {
     { p: [0, 0.900, 0.004], rx: 0.138, rz: 0.101, exp: 2.5 },
     { p: [0, 0.945, 0.003], rx: 0.141, rz: 0.100, exp: 2.5 },
     { p: [0, 1.000, 0.002], rx: 0.121, rz: 0.094, exp: 2.4 },
-    { p: [0, 1.040, 0.002], rx: 0.107, rz: 0.088, exp: 2.4 },
-    { p: [0, 1.090, 0.003], rx: 0.114, rz: 0.094, exp: 2.45 },
-    { p: [0, 1.145, 0.004], rx: 0.129, rz: 0.101, exp: 2.5 },
-    { p: [0, 1.205, 0.004], rx: 0.143, rz: 0.106, exp: 2.55 },
-    { p: [0, 1.265, 0.003], rx: 0.152, rz: 0.108, exp: 2.6 },
-    { p: [0, 1.325, 0.001], rx: 0.157, rz: 0.105, exp: 2.6 },
-    { p: [0, 1.380, -0.001], rx: 0.157, rz: 0.099, exp: 2.6 },
+    { p: [0, 1.040, 0.002], rx: 0.107, rz: 0.088, exp: 2.4, grooves: RACHIS },
+    { p: [0, 1.090, 0.003], rx: 0.114, rz: 0.094, exp: 2.45, grooves: RACHIS },
+    { p: [0, 1.145, 0.004], rx: 0.129, rz: 0.101, exp: 2.5, grooves: RACHIS },
+    { p: [0, 1.205, 0.004], rx: 0.143, rz: 0.106, exp: 2.55, grooves: RACHIS },
+    { p: [0, 1.265, 0.003], rx: 0.152, rz: 0.108, exp: 2.6, grooves: RACHIS },
+    { p: [0, 1.325, 0.001], rx: 0.157, rz: 0.105, exp: 2.6, grooves: RACHIS },
+    { p: [0, 1.380, -0.001], rx: 0.157, rz: 0.099, exp: 2.6, grooves: RACHIS },
     { p: [0, 1.425, -0.003], rx: 0.146, rz: 0.092, exp: 2.5 },
     { p: [0, 1.462, -0.004], rx: 0.110, rz: 0.080, exp: 2.3 },
     { p: [0, 1.492, -0.002], rx: 0.062, rz: 0.058 },
     { p: [0, 1.512, 0.000], rx: 0.034, rz: 0.034 },
-  ], 2)), 28);
+  ], 2)), 18);
 
   // Épaules (deltoïdes) : referment la jonction bras / tronc.
   addEllipsoid([0.161, 1.378, -0.002], [0.062, 0.072, 0.062], 18, 11);
@@ -292,7 +350,7 @@ function buildHumanMesh() {
       { p: [0.250 * side, 0.770, 0.019], rx: 0.031, rz: 0.017 }, // paume
       { p: [0.251 * side, 0.715, 0.020], rx: 0.026, rz: 0.013 },
       { p: [0.251 * side, 0.676, 0.021], rx: 0.014, rz: 0.008 }, // doigts
-    ], 2)), 18);
+    ], 2)), 13);
   });
 
   // ---------------------------------------------------------------
@@ -313,7 +371,7 @@ function buildHumanMesh() {
       { p: [0.082 * side, 0.190, 0.004], rx: 0.035, rz: 0.040 },
       { p: [0.078 * side, 0.115, 0.002], rx: 0.028, rz: 0.031 },
       { p: [0.075 * side, 0.075, 0.002], rx: 0.025, rz: 0.028 }, // cheville
-    ], 2)), 20);
+    ], 2)), 15);
 
     // Pied : talon en arrière, masse qui s'aplatit vers les orteils.
     addTube(domeEnds(refine([
@@ -322,7 +380,54 @@ function buildHumanMesh() {
       { p: [0.075 * side, 0.022, 0.048], rx: 0.035, rz: 0.038 },
       { p: [0.074 * side, 0.018, 0.088], rx: 0.031, rz: 0.024 },
       { p: [0.073 * side, 0.016, 0.110], rx: 0.022, rz: 0.012 },
-    ], 2)), 14);
+    ], 2)), 11);
+  });
+
+  // ---- Lissage : chaque sommet reçoit la moyenne des normales des facettes
+  // qui l'entourent, puis sa propre couleur. Une facette porte alors deux
+  // teintes de bord, et le dégradé tracé entre elles supprime le facettage.
+  const vertexCount = positions.length / 3;
+  const acc = new Float32Array(positions.length);
+  faces.forEach((f) => {
+    [f.a, f.b, f.c, f.d].forEach((vi) => {
+      acc[vi * 3] += f.n[0]; acc[vi * 3 + 1] += f.n[1]; acc[vi * 3 + 2] += f.n[2];
+    });
+  });
+
+  const vertexColors = new Uint8Array(positions.length);
+  for (let i = 0; i < vertexCount; i++) {
+    let n = [acc[i * 3], acc[i * 3 + 1], acc[i * 3 + 2]];
+    if (V3.length(n) < 1e-6) n = [0, 1, 0];
+    n = V3.normalize(n);
+    const p = [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]];
+    const col = shadeVertex(n, p, ambientOcclusion(p, n));
+    vertexColors[i * 3] = col[0];
+    vertexColors[i * 3 + 1] = col[1];
+    vertexColors[i * 3 + 2] = col[2];
+  }
+
+  const css = (r, g, b) => `rgb(${r | 0},${g | 0},${b | 0})`;
+  const edgeColor = (i, j) => css(
+    (vertexColors[i * 3] + vertexColors[j * 3]) / 2,
+    (vertexColors[i * 3 + 1] + vertexColors[j * 3 + 1]) / 2,
+    (vertexColors[i * 3 + 2] + vertexColors[j * 3 + 2]) / 2
+  );
+  const lum = (i) => vertexColors[i * 3] * 0.3 + vertexColors[i * 3 + 1] * 0.59 + vertexColors[i * 3 + 2] * 0.11;
+  faces.forEach((f) => {
+    // Deux directions possibles : autour de la section (a→b, d→c) ou le long
+    // de l'axe (a→d, b→c). On retient celle où l'écart de lumière est le plus
+    // grand — un dégradé mal orienté laisserait des bandes dans l'autre sens.
+    const around = Math.abs((lum(f.a) + lum(f.d)) - (lum(f.b) + lum(f.c)));
+    const along = Math.abs((lum(f.a) + lum(f.b)) - (lum(f.d) + lum(f.c)));
+    f.axial = along > around;
+    if (f.axial) {
+      f.colorA = edgeColor(f.a, f.b);
+      f.colorB = edgeColor(f.d, f.c);
+    } else {
+      f.colorA = edgeColor(f.a, f.d);
+      f.colorB = edgeColor(f.b, f.c);
+    }
+    f.colorFlat = edgeColor(f.a, f.c);
   });
 
   parts.forEach((prt) => {

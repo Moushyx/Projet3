@@ -267,6 +267,7 @@
     const dt = Date.now() - pointerDownInfo.t;
     pointerDownInfo = null;
     if (moved > 8 || dt > 500) return; // c'était un glissé, pas un tap
+    if (engine.isMultiTouch()) return; // fin d'un pincement, pas un appui
 
     const rect = canvas.getBoundingClientRect();
     const px = e.clientX - rect.left;
@@ -353,6 +354,7 @@
       else { projDist[i] = -1; }
     }
     const camPos = basis.camPos;
+    const smoothShading = !engine.isDragBusy();
     for (let i = 0; i < bodyMesh.parts.length; i++) {
       const ctr = bodyMesh.parts[i].centroid;
       const pr = engine.project(ctr, basis);
@@ -369,7 +371,6 @@
       const bx = projX[face.b], by = projY[face.b];
       const cx = projX[face.c], cy = projY[face.c];
       const dx = projX[face.d], dy = projY[face.d];
-      const color = face.color;
       drawList.push({
         key: partDepth[face.part],
         dist: (da + db + dc + dd) * 0.25,
@@ -380,11 +381,24 @@
           ctx.lineTo(cx, cy);
           ctx.lineTo(dx, dy);
           ctx.closePath();
-          ctx.fillStyle = color;
+          let paint;
+          if (smoothShading) {
+            // Dégradé entre les deux bords de la facette : la lumière devient
+            // continue d'une facette à l'autre, le facettage disparaît.
+            const g = face.axial
+              ? ctx.createLinearGradient((ax + bx) / 2, (ay + by) / 2, (dx + cx) / 2, (dy + cy) / 2)
+              : ctx.createLinearGradient((ax + dx) / 2, (ay + dy) / 2, (bx + cx) / 2, (by + cy) / 2);
+            g.addColorStop(0, face.colorA);
+            g.addColorStop(1, face.colorB);
+            paint = g;
+          } else {
+            paint = face.colorFlat;
+          }
+          ctx.fillStyle = paint;
           ctx.fill();
           // Le contour de même teinte comble les fissures d'anticrénelage
           // entre facettes voisines.
-          ctx.strokeStyle = color;
+          ctx.strokeStyle = face.colorFlat;
           ctx.lineWidth = 0.8;
           ctx.stroke();
         },
