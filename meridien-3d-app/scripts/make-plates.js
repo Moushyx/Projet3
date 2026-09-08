@@ -20,6 +20,9 @@ const { parseBodyModel } = require(path.join(ROOT, 'js', 'model.js'));
 const { POINTS_3D, POINT_COTES } = require(path.join(ROOT, 'js', 'points-3d.js'));
 const { MERIDIANS } = require(path.join(ROOT, 'js', 'data.js'));
 const { POINT_RULES } = require('./point-rules.js');
+const { CATALOGUE } = require(path.join(ROOT, 'js', 'catalogue.js'));
+const { fusionnerCatalogue } = require(path.join(ROOT, 'js', 'fusion.js'));
+fusionnerCatalogue(MERIDIANS, CATALOGUE, POINT_RULES);
 
 const raw = fs.readFileSync(path.join(ROOT, 'assets', 'body.bin'));
 const model = parseBodyModel(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
@@ -289,6 +292,9 @@ const PLATE_BY_ZONE = {
   dos:    ['tronc-dos', 'tronc-face'],
   hanche: ['tronc-dos', 'tronc-face'],
   nuque:  ['tete-dos', 'tete-profil'],
+  cou:    ['tete-face', 'tete-profil', 'tete-dos'],
+  crane:  ['tete-profil', 'tete-dos', 'tete-face'],
+  perinee: ['tronc-face'],
   tete:   ['tete-face', 'tete-profil', 'tete-dos'],
   epaule: ['bras-face', 'bras-dos', 'tronc-dos', 'tronc-face'],
   bras:   ['bras-face', 'bras-dos'],
@@ -366,11 +372,11 @@ PLATES.forEach((pl) => {
   const src = BOITES[region] || [-0.1, 0.8, -0.1, 0.1, 1.0, 0.1];
   const bb = src.slice();
   const dir = V3.normalize(pl.dir);
-  for (let k = 0; k < 3; k++) {
-    // Marge large dans l'axe du regard, serrée dans le plan de l'image.
-    const m = 0.025 + Math.abs(dir[k]) * 0.30;
-    bb[k] -= m; bb[k+3] += m;
-  }
+  // Marge égale dans les trois axes : la boîte vient du nuage de la région
+  // elle-même, sa profondeur est donc déjà juste. Une marge large dans l'axe
+  // du regard, héritée du cadrage sur les points, faisait entrer la main dans
+  // la planche de la jambe — elle passe à quarante centimètres de là.
+  for (let k = 0; k < 3; k++) { bb[k] -= 0.025; bb[k+3] += 0.025; }
   // Un membre ne déborde pas sur celui d'en face, qui viendrait s'interposer.
   if (UN_SEUL_COTE[region] || pl.id === 'tronc-profil') bb[0] = Math.max(bb[0], 0.004);
   pl.box = bb;
@@ -481,16 +487,10 @@ function traceVisage(img, plate, frame) {
     courbe([[0.05, 0.560], [0.04, 0.500]], G);
   }
 
-  if (plate.id === 'tete-profil') {
-    // De profil on ne peut pas creuser la silhouette, qui vient du maillage.
-    // On pose seulement les traits internes, à leur hauteur exacte.
-    const z = (ht) => zFront(CHIN + ht * HH);
-    const P = (ht, recul) => [0.3 * demi, CHIN + ht * HH, z(ht) - recul];
-    trait(P(0.500, 0.012), P(0.500, 0.052), G);          // fente palpébrale
-    trait(P(0.560, 0.010), P(0.560, 0.055), G);          // sourcil
-    trait(P(0.192, 0.008), P(0.192, 0.045), G);          // bouche
-    trait(P(0.335, 0.006), P(0.335, 0.030), G);          // base du nez
-  }
+  // De profil, on ne dessine rien : la silhouette du maillage ne creuse ni
+  // l'orbite ni la bouche, et des traits internes posés à leur hauteur
+  // ressemblaient à des rayures plus qu'à un visage. Les points péri-
+  // auriculaires se repèrent sur l'oreille, qui, elle, est modelée.
 }
 
 // ---------- Écriture ----------

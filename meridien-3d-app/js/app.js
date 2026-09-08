@@ -32,6 +32,10 @@
     try { localStorage.setItem(CLE_FAVORIS, JSON.stringify(favoris)); } catch (e) { /* navigation privée */ }
   }
 
+  // Les 361 points de la nomenclature standard : la sélection commentée de
+  // data.js, complétée par le catalogue.
+  if (typeof CATALOGUE !== 'undefined') fusionnerCatalogue(MERIDIANS, CATALOGUE);
+
   const DISCLAIMER = "Positions indicatives et simplifiées, à but pédagogique. Ne remplace pas un avis médical ni la formation d'un praticien.";
 
   function setAccent(color) {
@@ -163,9 +167,11 @@
       // point : sur une mesure courte, la poser dans l'axe la ferait chevaucher
       // la pastille et le nom du repère.
       const ux = nx / 6, uy = ny / 6;
-      const versPoint = (X(d.cx) - mx) * ux + (Y(d.cy) - my) * uy;
-      const sgn = versPoint > 0 ? -1 : 1;
-      const lx = mx + ux * 24 * sgn, ly = my + uy * 24 * sgn;
+      // Le nom du point est toujours écrit à sa droite : la mesure se pose donc
+      // à gauche quand elle est verticale, au-dessus quand elle est
+      // horizontale. Sur une cote d'un centimètre, les deux se chevauchaient.
+      const sgn = Math.abs(ux) >= 0.3 ? (ux < 0 ? 1 : -1) : (uy < 0 ? 1 : -1);
+      const lx = mx + ux * 26 * sgn, ly = my + uy * 26 * sgn;
       etiquettes.push(`<text class="cote-txt" x="${lx}" y="${ly + 4}" text-anchor="middle">${c.texte}</text>`);
       if (c.depart) {
         // Le nom du repère se met dans le prolongement de la cote, au-delà de
@@ -500,6 +506,9 @@
     infoSub.textContent = `« ${point.trad} »`;
     const sideLabel = side === 'L' ? 'Côté gauche' : side === 'R' ? 'Côté droit' : 'Ligne médiane';
     const rep = (typeof REPERAGE !== 'undefined' && REPERAGE[point.id]) || {};
+    // Faute de localisation rédigée, on montre celle que la règle de placement
+    // permet de formuler : le repère osseux et le nombre de cun.
+    const locAuto = !rep.loc && typeof POINT_LOC !== 'undefined' ? POINT_LOC[point.id] : null;
     infoBody.innerHTML = `
       <div class="meta-row">
         <span class="meta"><span class="k">Canal</span><span class="v">${meridian.name}</span></span>
@@ -509,7 +518,7 @@
           <span class="k">${estFavori(point.id) ? '★' : '☆'}</span><span class="v">Favori</span></button>
       </div>
       ${buildZoneView(point.id, side)}
-      ${rep.loc ? `<div class="section-label">Localisation</div><p>${rep.loc}</p>` : ''}
+      ${rep.loc || locAuto ? `<div class="section-label">Localisation</div><p>${rep.loc || locAuto}</p>` : ''}
       ${rep.trouver ? `<div class="section-label">Comment le trouver</div><p>${rep.trouver}</p>` : ''}
       ${rep.prudence ? `<p class="prudence"><b>Prudence.</b> ${rep.prudence}</p>` : ''}
       <div class="section-label">Indications principales</div>
@@ -696,9 +705,10 @@
           else if (x === b) x.classList.add('faux');
         });
         const rep = (typeof REPERAGE !== 'undefined' && REPERAGE[cible.point.id]) || {};
+        const lq = rep.loc || (typeof POINT_LOC !== 'undefined' ? POINT_LOC[cible.point.id] : '');
         verdict.innerHTML = `
           <p><b>${cible.point.id} ${cible.point.name}</b> — ${cible.meridian.name}.</p>
-          ${rep.loc ? `<p>${rep.loc}</p>` : ''}
+          ${lq ? `<p>${lq}</p>` : ''}
           <p><button class="btn-large" data-suivant="1">Question suivante →</button></p>`;
         verdict.querySelector('[data-suivant]').addEventListener('click', montrerQuiz);
         infoSub.textContent = `Score : ${quizScore.bon} / ${quizScore.total}`;
@@ -794,6 +804,9 @@
     const qn = sansAccent(q);
     const score = ({ meridian, point }) => {
       const rep = (typeof REPERAGE !== 'undefined' && REPERAGE[point.id]) || {};
+    // Faute de localisation rédigée, on montre celle que la règle de placement
+    // permet de formuler : le repère osseux et le nombre de cun.
+    const locAuto = !rep.loc && typeof POINT_LOC !== 'undefined' ? POINT_LOC[point.id] : null;
       if (sansAccent(point.id).startsWith(qn)) return 0;
       if (sansAccent(point.name).includes(qn) || sansAccent(point.trad).includes(qn)) return 1;
       if (sansAccent(meridian.name).includes(qn)) return 2;
@@ -895,12 +908,16 @@
       const serre = ap.pos[1] > 1.50 || ap.pos[1] < 0.16 || Math.abs(ap.pos[0]) > 0.40;
       const ech = serre ? 0.6 : 1;
       const enAvant = focusPoints && focusPoints.has(ap.point.id);
+      // Sans canal choisi, les trois cent soixante et un points sont visibles :
+      // à la taille qu'ils ont dans un canal isolé, ils couvriraient le corps.
+      const neutre = !selectedMeridianId && !focusPoints;
+      const rBase = isSelected || enAvant ? 0.016 : neutre ? 0.0072 : active ? 0.0105 : 0.006;
       pointDraws.push({
         pos: ap.pos,
         color: ap.color,
-        radius: (isSelected || enAvant ? 0.016 : active ? 0.0105 : 0.006) * ech,
-        alpha: active ? 1 : 0.22,
-        glow: isSelected ? 0.8 : enAvant ? 0.55 + pulse * 0.3 : active ? pulse * 0.5 : 0,
+        radius: rBase * ech,
+        alpha: neutre ? 0.8 : active ? 1 : 0.18,
+        glow: isSelected ? 0.8 : enAvant ? 0.55 + pulse * 0.3 : (active && !neutre) ? pulse * 0.5 : 0,
       });
     });
     return pointDraws;

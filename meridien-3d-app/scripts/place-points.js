@@ -17,6 +17,9 @@ const ROOT = path.join(__dirname, '..');
 global.V3 = require(path.join(ROOT, 'js', 'vec3.js')).V3;
 const { MERIDIANS } = require(path.join(ROOT, 'js', 'data.js'));
 const { POINT_RULES, MERIDIAN_ROUTE } = require('./point-rules.js');
+const { CATALOGUE } = require(path.join(ROOT, 'js', 'catalogue.js'));
+const { fusionnerCatalogue } = require(path.join(ROOT, 'js', 'fusion.js'));
+fusionnerCatalogue(MERIDIANS, CATALOGUE, POINT_RULES);
 const { loadVertices, detectLandmarks, detectDigits, refineLimb } = require('./landmarks.js');
 
 const { V } = loadVertices(ROOT);
@@ -392,13 +395,27 @@ function legFrame(t) {
 // vertèbre sur ce corps, ce qui recoupe la règle clinique.
 const VERT_STEP = CUN;
 const VERT_INDEX = {
-  C7b: 0.5, T3: 3, T4: 4, T5: 5, T9: 9, T11: 11, L2: 14, L2b: 14.5, L4: 16, S5: 21,
+  C7b: 0.5, T3: 3, T4: 4, T5: 5, T9: 9, T11: 11, L2: 14, L2b: 14.5, L4: 16, L4b: 16.5,
 };
+const COCCYX_Y = L.crotch + 0.03;
 function vertebraY(name) {
   // GV1 n'est pas une vertèbre : le point se situe sous la pointe du coccyx,
   // à hauteur du périnée. Le compte des espaces vertébraux ne l'atteint pas.
-  if (name === 'S5') return L.crotch + 0.03;
-  return L.sternalNotch[1] - 0.01 - (VERT_INDEX[name] || 0) * VERT_STEP;
+  if (name === 'S5') return COCCYX_Y;
+  const m = /^([CTLS])(\d+)(b?)$/.exec(name);
+  // Le sacrum ne suit pas le pas des vertèbres mobiles : ses quatre trous se
+  // répartissent entre L5 et la pointe du coccyx.
+  if (m && m[1] === 'S') {
+    const l5 = L.sternalNotch[1] - 0.01 - 17 * VERT_STEP;
+    return l5 + (COCCYX_Y - l5) * (parseInt(m[2], 10) / 5);
+  }
+  let idx = VERT_INDEX[name];
+  if (idx === undefined && m) {
+    const n = parseInt(m[2], 10);
+    idx = m[1] === 'C' ? 0 : m[1] === 'T' ? n : 12 + n;
+    if (m[3]) idx += 0.5;
+  }
+  return L.sternalNotch[1] - 0.01 - (idx || 0) * VERT_STEP;
 }
 
 // ---------------------------------------------------------------
@@ -493,6 +510,36 @@ function pointPied(rule) {
   });
 }
 
+// Demi-largeur du cou, à mi-hauteur : elle sert d'unité aux points latéraux
+// de la gorge et du sterno-cléido-mastoïdien.
+const COU_DEMI = (() => {
+  // Le cou est le passage le plus étroit entre les épaules et la tête : on
+  // retient donc la plus petite largeur de la bande, plutôt qu'une hauteur
+  // choisie d'avance, où le trapèze ou la mâchoire viennent fausser la mesure.
+  let mini = Infinity;
+  for (let y = L.neckBase + 0.012; y < CHIN_Y - 0.008; y += 0.006) {
+    let w = 0;
+    V.forEach((v) => {
+      if (Math.abs(v[1] - y) > 0.005 || v[2] < -0.07 || v[2] > 0.07) return;
+      if (Math.abs(v[0]) > w) w = Math.abs(v[0]);
+    });
+    if (w > 0.02 && w < mini) mini = w;
+  }
+  return isFinite(mini) ? mini : 0.055;
+})();
+
+// Centre du crâne, d'où l'on vise la ligne médiane sagittale.
+const TETE_C = (() => {
+  let sy = 0, sz = 0, n = 0;
+  V.forEach((v) => {
+    if (v[1] < CHIN_Y + 0.06 || Math.abs(v[0]) > 0.03) return;
+    sy += v[1]; sz += v[2]; n++;
+  });
+  return n ? [0, sy / n, sz / n] : [0, CHIN_Y + 0.6 * HEAD_H, 0];
+})();
+console.log('cou : demi-largeur', (COU_DEMI * 1000).toFixed(0), 'mm | centre du crâne y =',
+  TETE_C[1].toFixed(3), 'z =', TETE_C[2].toFixed(3));
+
 // ---------------------------------------------------------------
 // Placement
 // ---------------------------------------------------------------
@@ -528,7 +575,7 @@ function place(id, rule) {
       return { guess: [x, y, sp[2]], facing: V3.normalize([rule.lat * 2, 0, -1]), rayon: 0.04 };
     }
     case 'nuque': {
-      const y = L.neckBase + 0.09;
+      const y = L.neckBase + 0.09 + (rule.haut || 0) * CUN;
       const sp = surfaceAt(y, 0, -1, 0.012, true) || [0, y, -0.08];
       return { guess: [rule.lat * LAT_CUN, y, sp[2]], facing: V3.normalize([rule.lat, -0.3, -1]) };
     }
@@ -576,6 +623,34 @@ function place(id, rule) {
       return r;
     }
     case 'pied': return pointPied(rule);
+    case 'cou': {
+      // Le cou : hauteur relative de sa base au menton, écart latéral en
+      // demi-largeurs de cou. Les points du sterno-cléido-mastoïdien et de la
+      // gorge se donnent ainsi.
+      const y = L.neckBase + rule.h * (CHIN_Y - L.neckBase);
+      const x = (rule.lat || 0) * COU_DEMI;
+      const sp = surfaceColumn(y, x, true, 0.012) || [x, y, 0.05];
+      return { guess: [x, y, sp[2]], facing: V3.normalize([(rule.lat || 0) * 1.6, 0, 1]), rayon: 0.035 };
+    }
+    case 'crane': {
+      // Ligne médiane du crâne, repérée par un arc : 0 devant à l'horizontale,
+      // 0,5 au sommet, 1 derrière. C'est ainsi que se suivent les points du
+      // Vaisseau Gouverneur, du front à l'occiput.
+      const a = rule.arc * Math.PI;
+      const dir = [0, Math.sin(a), Math.cos(a)];
+      let best = null, bd = -Infinity;
+      for (let i = 0; i < V.length; i++) {
+        const v = V[i];
+        if (Math.abs(v[0]) > 0.022 || v[1] < CHIN_Y + 0.04) continue;
+        const d = (v[1] - TETE_C[1]) * dir[1] + (v[2] - TETE_C[2]) * dir[2];
+        if (d > bd) { bd = d; best = v; }
+      }
+      if (!best) return { guess: [0, L.height - 0.01, 0], facing: [0, 1, 0], rayon: 0.04 };
+      return { guess: [0, best[1], best[2]], facing: dir, rayon: 0.03 };
+    }
+    case 'perinee': {
+      return { guess: [0, L.crotch - 0.005, -0.015], facing: [0, -1, 0], rayon: 0.05 };
+    }
     case 'tete': {
       const y = CHIN_Y + rule.h * HEAD_H;
       const x = rule.lat * headHalfWidth;
@@ -754,6 +829,48 @@ MERIDIANS.forEach((m) => {
 });
 console.log('trajets :', Object.values(paths).reduce((s, p) => s + p.length, 0), 'tronçons |', cut, 'interruptions');
 
+// ---------------------------------------------------------------
+// Localisation en clair
+// ---------------------------------------------------------------
+// Les 95 points commentés ont leur localisation rédigée dans js/reperage.js.
+// Pour les autres, on la formule à partir de la règle elle-même : elle dit
+// déjà tout ce qu'il faut — le repère et le nombre de cun.
+const locs = {};
+function cunTexte(v) {
+  const t = (Math.round(Math.abs(v) * 10) / 10).toString().replace('.', ',');
+  return t + (Math.abs(v) > 1 ? ' cun' : ' cun');
+}
+MERIDIANS.forEach((m) => m.points.forEach((pt) => {
+  const r = POINT_RULES[pt.id];
+  if (!r) return;
+  const bouts = [];
+  if (r.zone === 'torse') {
+    const ref = r.from === 'nombril' ? 'du nombril' : 'du creux sus-sternal';
+    if (Math.abs(r.cun) > 0.01) bouts.push(cunTexte(r.cun) + (r.cun > 0 ? ' sous ' : ' au-dessus ') + ref);
+    else bouts.push('à hauteur ' + ref);
+    if (Math.abs(r.lat) > 0.01) bouts.push(cunTexte(r.lat) + ' de la ligne médiane');
+    else if (r.face !== 'side') bouts.push('sur la ligne médiane');
+    if (r.face === 'side') bouts.push('sur la ligne axillaire moyenne');
+  } else if (r.zone === 'dos') {
+    bouts.push('sous l\'apophyse épineuse de ' + String(r.vertebre).replace('b', ''));
+    if (Math.abs(r.lat) > 0.01) bouts.push(cunTexte(r.lat) + ' de la ligne médiane');
+    else bouts.push('sur la ligne médiane');
+  } else if (r.zone === 'bras') {
+    if (r.cun >= 15) bouts.push(r.cun >= 20.9 ? 'au pli du poignet' : cunTexte(21 - r.cun) + ' au-dessus du pli du poignet');
+    else if (Math.abs(r.cun - 9) < 0.2) bouts.push('au pli du coude');
+    else bouts.push(cunTexte(r.cun - 9) + (r.cun > 9 ? ' sous le pli du coude' : ' au-dessus du pli du coude'));
+  } else if (r.zone === 'jambe') {
+    if (r.cun > 26) bouts.push(Math.abs(r.cun - 34) < 0.2 ? 'à hauteur de la malléole' : cunTexte(34 - r.cun) + ' au-dessus de la malléole');
+    else if (Math.abs(r.cun - 18) < 0.2) bouts.push('au niveau du genou');
+    else bouts.push(cunTexte(r.cun - 18) + (r.cun > 18 ? ' sous le genou' : ' au-dessus du genou'));
+  } else if (r.zone === 'crane') {
+    bouts.push('sur la ligne médiane du crâne');
+  } else if (r.zone === 'cou') {
+    bouts.push('sur le cou');
+  }
+  if (bouts.length) locs[pt.id] = bouts.join(', ') + '.';
+}));
+
 const out = `// Positions des points d'acupression et trajets des méridiens.
 // Fichier produit par scripts/place-points.js à partir des localisations
 // canoniques (point-rules.js) et des repères mesurés sur le modèle.
@@ -768,7 +885,11 @@ const MERIDIAN_PATHS = ${JSON.stringify(paths)};
 // Segments de mesure, en coordonnées du corps : { a, b, texte, depart }.
 const POINT_COTES = ${JSON.stringify(cotes)};
 
-if (typeof module !== 'undefined') module.exports = { POINTS_3D, MERIDIAN_PATHS, POINT_COTES };
+// Localisation formulée à partir de la règle, pour les points que
+// js/reperage.js ne détaille pas.
+const POINT_LOC = ${JSON.stringify(locs)};
+
+if (typeof module !== 'undefined') module.exports = { POINTS_3D, MERIDIAN_PATHS, POINT_COTES, POINT_LOC };
 `;
 fs.writeFileSync(path.join(ROOT, 'js', 'points-3d.js'), out);
 console.log('écrit js/points-3d.js :', (out.length / 1024).toFixed(0), 'Ko');
