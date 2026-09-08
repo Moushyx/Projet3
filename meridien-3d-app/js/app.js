@@ -453,10 +453,15 @@
         && selectedAcupoint.point.id === ap.point.id
         && selectedAcupoint.side === ap.side;
       const pulse = active ? 0.5 + Math.sin(t * 2.2 + ap.pos[1] * 5) * 0.15 : 0;
+      // Le visage, la main et le pied portent des points distants d'un
+      // centimètre : à la taille de ceux du tronc, les pastilles se recouvrent
+      // et l'on ne distingue plus lequel on vise.
+      const serre = ap.pos[1] > 1.50 || ap.pos[1] < 0.16 || Math.abs(ap.pos[0]) > 0.40;
+      const ech = serre ? 0.6 : 1;
       pointDraws.push({
         pos: ap.pos,
         color: ap.color,
-        radius: isSelected ? 0.016 : active ? 0.0105 : 0.006,
+        radius: (isSelected ? 0.016 : active ? 0.0105 : 0.006) * ech,
         alpha: active ? 1 : 0.28,
         glow: isSelected ? 0.8 : active ? pulse * 0.5 : 0,
       });

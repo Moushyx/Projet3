@@ -218,50 +218,59 @@ const MERIDIANS = [
 ];
 
 // Organes stylisés affichés à l'intérieur du buste (formes simplifiées, non anatomiquement exactes)
+// Organes, situés sur ce corps-ci.
+//
+// Les hauteurs sont celles du modèle anatomique : creux sus-sternal à 1,45 m,
+// nombril à 1,06, bord supérieur du pubis à 0,85. Les positions précédentes
+// dataient du corps dessiné à la main qu'elles accompagnaient ; sur le
+// maillage réel, le cadre colique tombait en travers du bassin et les reins
+// dans le bas-ventre.
 const ORGAN_SHAPES = {
   lungs: { label: 'Poumons', color: '#7ec8e3', parts: [
-    { type: 'ellipsoid', pos: [0.08, 1.32, 0.02], scale: [0.055, 0.11, 0.06] },
-    { type: 'ellipsoid', pos: [-0.08, 1.32, 0.02], scale: [0.055, 0.11, 0.06] },
+    { type: 'ellipsoid', pos: [0.075, 1.31, -0.01], scale: [0.055, 0.115, 0.065] },
+    { type: 'ellipsoid', pos: [-0.075, 1.31, -0.01], scale: [0.055, 0.115, 0.065] },
   ]},
   heart: { label: 'Cœur', color: '#e74c3c', parts: [
-    { type: 'ellipsoid', pos: [-0.02, 1.28, 0.03], scale: [0.05, 0.06, 0.05] },
+    { type: 'ellipsoid', pos: [-0.025, 1.27, 0.015], scale: [0.05, 0.06, 0.045] },
   ]},
+  // Le cadre colique : côlon ascendant à droite, transverse au-dessus du
+  // nombril, descendant à gauche.
   largeIntestine: { label: 'Gros Intestin', color: '#4a90d9', parts: [
-    { type: 'torus', pos: [0, 0.95, 0.02], scale: [0.11, 0.11, 0.05] },
+    { type: 'torus', pos: [0, 1.09, 0.01], scale: [0.085, 0.085, 0.028] },
   ]},
   stomach: { label: 'Estomac', color: '#f4a836', parts: [
-    { type: 'ellipsoid', pos: [-0.06, 1.13, 0.04], scale: [0.07, 0.06, 0.05] },
+    { type: 'ellipsoid', pos: [-0.045, 1.19, 0.02], scale: [0.065, 0.055, 0.045] },
   ]},
   spleen: { label: 'Rate', color: '#f2c94c', parts: [
-    { type: 'ellipsoid', pos: [-0.12, 1.16, -0.02], scale: [0.045, 0.06, 0.04] },
+    { type: 'ellipsoid', pos: [-0.105, 1.22, -0.03], scale: [0.04, 0.055, 0.035] },
   ]},
   smallIntestine: { label: 'Intestin Grêle', color: '#ff6f91', parts: [
-    { type: 'ellipsoid', pos: [0, 0.93, 0.03], scale: [0.09, 0.08, 0.06] },
+    { type: 'ellipsoid', pos: [0, 1.00, 0.02], scale: [0.075, 0.07, 0.05] },
   ]},
   bladder: { label: 'Vessie', color: '#2c3e91', parts: [
-    { type: 'ellipsoid', pos: [0, 0.855, 0.03], scale: [0.06, 0.05, 0.05] },
+    { type: 'ellipsoid', pos: [0, 0.895, 0.02], scale: [0.05, 0.045, 0.04] },
   ]},
   kidneys: { label: 'Reins', color: '#1b2a4a', parts: [
-    { type: 'ellipsoid', pos: [0.07, 1.02, -0.06], scale: [0.035, 0.06, 0.03] },
-    { type: 'ellipsoid', pos: [-0.07, 1.02, -0.06], scale: [0.035, 0.06, 0.03] },
+    { type: 'ellipsoid', pos: [0.06, 1.16, -0.06], scale: [0.032, 0.055, 0.028] },
+    { type: 'ellipsoid', pos: [-0.06, 1.16, -0.06], scale: [0.032, 0.055, 0.028] },
   ]},
   pericardium: { label: 'Péricarde', color: '#a66bbe', parts: [
-    { type: 'ellipsoid', pos: [-0.02, 1.28, 0.03], scale: [0.065, 0.075, 0.065], wire: true },
+    { type: 'ellipsoid', pos: [-0.025, 1.27, 0.015], scale: [0.062, 0.072, 0.058], wire: true },
   ]},
   tripleWarmer: { label: 'San Jiao (3 foyers)', color: '#d98cd9', parts: [
-    { type: 'ellipsoid', pos: [0, 1.15, 0], scale: [0.15, 0.32, 0.10], wire: true },
+    { type: 'ellipsoid', pos: [0, 1.14, 0], scale: [0.13, 0.30, 0.09], wire: true },
   ]},
   gallbladder: { label: 'Vésicule Biliaire', color: '#2ecc71', parts: [
-    { type: 'ellipsoid', pos: [0.11, 1.15, 0.05], scale: [0.025, 0.04, 0.025] },
+    { type: 'ellipsoid', pos: [0.075, 1.20, 0.02], scale: [0.022, 0.035, 0.022] },
   ]},
   liver: { label: 'Foie', color: '#27ae60', parts: [
-    { type: 'ellipsoid', pos: [0.10, 1.18, 0.05], scale: [0.09, 0.06, 0.06] },
+    { type: 'ellipsoid', pos: [0.075, 1.23, 0.01], scale: [0.085, 0.055, 0.055] },
   ]},
   lowerAbdomen: { label: 'Champ de Cinabre (Dan Tian)', color: '#e67e22', parts: [
-    { type: 'ellipsoid', pos: [0, 0.90, 0.03], scale: [0.08, 0.08, 0.06], wire: true },
+    { type: 'ellipsoid', pos: [0, 0.93, 0.01], scale: [0.07, 0.07, 0.05], wire: true },
   ]},
   spineBrain: { label: 'Colonne / Cerveau', color: '#8a8f98', parts: [
-    { type: 'ellipsoid', pos: [0, 1.68, 0], scale: [0.08, 0.08, 0.08], wire: true },
+    { type: 'ellipsoid', pos: [0, 1.67, -0.01], scale: [0.065, 0.07, 0.07], wire: true },
   ]},
 };
 

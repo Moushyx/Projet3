@@ -19,6 +19,7 @@ global.V3 = require(path.join(ROOT, 'js', 'vec3.js')).V3;
 const { parseBodyModel } = require(path.join(ROOT, 'js', 'model.js'));
 const { POINTS_3D } = require(path.join(ROOT, 'js', 'points-3d.js'));
 const { MERIDIANS } = require(path.join(ROOT, 'js', 'data.js'));
+const { POINT_RULES } = require('./point-rules.js');
 
 const raw = fs.readFileSync(path.join(ROOT, 'assets', 'body.bin'));
 const model = parseBodyModel(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
@@ -46,21 +47,22 @@ console.log('triangles :', tris.length.toLocaleString('fr-FR'));
 // points que la planche doit montrer, ce qui évite les mains coupées et les
 // grandes zones vides.
 const PLATES = [
-  { id: 'tete-face',    nom: 'Tête, de face',        dir: [0, 0, -1], up: [0, 1, 0], w: 420 },
-  { id: 'tete-profil',  nom: 'Tête, de profil',      dir: [-1, 0, 0], up: [0, 1, 0], w: 420 },
-  { id: 'tete-dos',     nom: 'Nuque et occiput',     dir: [0, 0, 1],  up: [0, 1, 0], w: 420 },
-  { id: 'tronc-face',   nom: 'Tronc, de face',       dir: [0, 0, -1], up: [0, 1, 0], w: 460 },
-  { id: 'tronc-dos',    nom: 'Dos',                  dir: [0, 0, 1],  up: [0, 1, 0], w: 460 },
-  { id: 'bras-face',    nom: 'Bras, face antérieure', dir: [0, 0, -1], up: [0, 1, 0], w: 460 },
-  { id: 'bras-dos',     nom: 'Bras, face postérieure', dir: [0, 0, 1], up: [0, 1, 0], w: 460 },
-  { id: 'main-dos',     nom: 'Main, dos',            dir: [-1, 0, 0], up: [0, 1, 0], w: 420 },
-  { id: 'main-paume',   nom: 'Main, paume',          dir: [1, 0, 0],  up: [0, 1, 0], w: 420 },
-  { id: 'jambe-face',   nom: 'Jambe, face antérieure', dir: [0, 0, -1], up: [0, 1, 0], w: 400 },
-  { id: 'jambe-dos',    nom: 'Jambe, face postérieure', dir: [0, 0, 1], up: [0, 1, 0], w: 400 },
-  { id: 'jambe-interne', nom: 'Jambe, face interne',  dir: [1, 0, 0], up: [0, 1, 0], w: 400 },
-  { id: 'jambe-externe', nom: 'Jambe, face externe',  dir: [-1, 0, 0], up: [0, 1, 0], w: 400 },
-  { id: 'pied-dos',     nom: 'Pied, dessus',         dir: [0, -1, 0], up: [0, 0, 1], w: 420 },
-  { id: 'pied-plante',  nom: 'Pied, plante',         dir: [0, 1, 0],  up: [0, 0, 1], w: 420 },
+  { id: 'tete-face',    nom: 'Tête, de face',          dir: [0, 0, -1], up: [0, 1, 0], pxm: 4200 },
+  { id: 'tete-profil',  nom: 'Tête, de profil',        dir: [-1, 0, 0], up: [0, 1, 0], pxm: 4200 },
+  { id: 'tete-dos',     nom: 'Nuque et occiput',       dir: [0, 0, 1],  up: [0, 1, 0], pxm: 4200 },
+  { id: 'tronc-face',   nom: 'Tronc, de face',         dir: [0, 0, -1], up: [0, 1, 0], pxm: 3000 },
+  { id: 'tronc-dos',    nom: 'Dos',                    dir: [0, 0, 1],  up: [0, 1, 0], pxm: 3000 },
+  { id: 'tronc-profil', nom: 'Tronc, de profil',       dir: [-1, 0, 0], up: [0, 1, 0], pxm: 3000 },
+  { id: 'bras-face',    nom: 'Bras, face antérieure',  dir: [0, 0, -1], up: [0, 1, 0], pxm: 3200 },
+  { id: 'bras-dos',     nom: 'Bras, face postérieure', dir: [0, 0, 1],  up: [0, 1, 0], pxm: 3200 },
+  { id: 'main-dos',     nom: 'Main, dos',              dir: [-1, 0, 0], up: [0, 1, 0], pxm: 5200 },
+  { id: 'main-paume',   nom: 'Main, paume',            dir: [1, 0, 0],  up: [0, 1, 0], pxm: 5200 },
+  { id: 'jambe-face',   nom: 'Jambe, face antérieure', dir: [0, 0, -1], up: [0, 1, 0], pxm: 3000 },
+  { id: 'jambe-dos',    nom: 'Jambe, face postérieure', dir: [0, 0, 1], up: [0, 1, 0], pxm: 3000 },
+  { id: 'jambe-interne', nom: 'Jambe, face interne',   dir: [1, 0, 0],  up: [0, 1, 0], pxm: 3000 },
+  { id: 'jambe-externe', nom: 'Jambe, face externe',   dir: [-1, 0, 0], up: [0, 1, 0], pxm: 3000 },
+  { id: 'pied-dos',     nom: 'Pied, dessus',           dir: [0, -1, 0], up: [0, 0, 1], pxm: 5200 },
+  { id: 'pied-plante',  nom: 'Pied, plante',           dir: [0, 1, 0],  up: [0, 0, 1], pxm: 5200 },
 ];
 
 function plateBasis(plate) {
@@ -82,7 +84,10 @@ function plateFrame(plate) {
     rmin = Math.min(rmin, rr); rmax = Math.max(rmax, rr);
     umin = Math.min(umin, uu); umax = Math.max(umax, uu);
   }
-  const w = plate.w;
+  // La résolution est donnée en pixels par mètre de corps, pas en pixels
+  // d'image : c'est ce qui décide de la finesse du croquis quand on zoome sur
+  // une zone de quatorze centimètres, quelle que soit la taille de la région.
+  const w = Math.max(360, Math.min(1280, Math.round((rmax - rmin) * plate.pxm)));
   const scale = w / (rmax - rmin);
   const h = Math.round((umax - umin) * scale);
   return { ...basis, rmin, umax, scale, w, h };
@@ -104,6 +109,9 @@ function renderPlate(plate) {
   const depth = new Float32Array(w * h).fill(Infinity);
   const shade = new Float32Array(w * h);
   const facing = new Float32Array(w * h);
+  const nx = new Float32Array(w * h);
+  const ny = new Float32Array(w * h);
+  const nz = new Float32Array(w * h);
   const inside = new Uint8Array(w * h);
   const b = plate.box;
 
@@ -151,45 +159,77 @@ function renderPlate(plate) {
         if (w0 < 0 || w1 < 0 || w2 < 0) continue;
         const d = w0 * pts[0].depth + w1 * pts[1].depth + w2 * pts[2].depth;
         const o = y * w + x;
-        if (d < depth[o]) { depth[o] = d; shade[o] = lit; facing[o] = -V3.dot(n, frame.f); inside[o] = 1; }
+        if (d < depth[o]) {
+          depth[o] = d; shade[o] = lit; facing[o] = -V3.dot(n, frame.f); inside[o] = 1;
+          nx[o] = n[0]; ny[o] = n[1]; nz[o] = n[2];
+        }
       }
     }
   });
 
-  return { frame, depth, shade, facing, inside, w, h };
+  return { frame, depth, shade, facing, nx, ny, nz, inside, w, h };
 }
 
-// ---------- Mise en image : gris posterisé + contours ----------
-function toPNG(r) {
-  const { w, h, depth, shade, facing, inside } = r;
-  const px = new Uint8Array(w * h * 3).fill(250);
-  const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? Infinity : depth[y * w + x];
+// ---------- Mise en image : dessin au trait ----------
+// Pas de modelé : un aplat très clair, et des traits noirs là où la surface
+// se replie. Sur une planche destinée à situer un point au millimètre, les
+// dégradés d'ombre ne font que brouiller la lecture.
+function toPNG(r, plate) {
+  const { w, h, depth, facing, nx, ny, nz, inside } = r;
+  // Les traits de forme se lisent sur une distance du corps, pas sur un pixel :
+  // à 4 200 pixels par mètre, deux pixels voisins du visage ne diffèrent que
+  // d'un degré et le nez, la bouche et les paupières disparaissaient du croquis.
+  // On compare donc les orientations à deux millimètres de distance.
+  const pas = Math.max(1, Math.min(4, Math.round(r.frame.scale * 0.0008)));
+  const px = new Uint8Array(w * h * 3).fill(255);
+
+  const dAt = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? Infinity : depth[y * w + x];
+  const inAt = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : inside[y * w + x];
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const o = y * w + x;
       if (!inside[o]) continue;
-      // Posterisation : moins de niveaux, un dessin plus lisible et un fichier
-      // bien plus léger.
-      const level = Math.round(shade[o] * 7) / 7;
-      let v = Math.round(248 - (1 - level) * 165);
 
-      // Ligne de forme : là où la surface se dérobe au regard, elle s'assombrit.
-      // C'est ce que fait le hachurage d'un croquis anatomique.
-      if (facing[o] < 0.34) v = Math.round(v * (0.55 + facing[o]));
+      // Fond du corps : un gris à peine posé, juste pour détacher la silhouette
+      // du papier. Le bord qui se dérobe au regard est un peu plus dense.
+      let v = facing[o] < 0.30 ? 232 : 246;
 
-      // Contour : rupture de profondeur avec le voisinage.
+      // Contour : rupture de profondeur, ou bord de la silhouette.
       const d = depth[o];
-      const grad = Math.max(
-        Math.abs(at(x - 1, y) - d), Math.abs(at(x + 1, y) - d),
-        Math.abs(at(x, y - 1) - d), Math.abs(at(x, y + 1) - d)
+      const silhouette = !inAt(x-1, y) || !inAt(x+1, y) || !inAt(x, y-1) || !inAt(x, y+1);
+      const saut = Math.max(
+        Math.abs(dAt(x-1, y) - d), Math.abs(dAt(x+1, y) - d),
+        Math.abs(dAt(x, y-1) - d), Math.abs(dAt(x, y+1) - d)
       );
-      if (!isFinite(grad) || grad > 0.006) v = 45;
+      let trait = silhouette || !isFinite(saut) || saut > 0.004;
 
-      const q = o * 3;
-      px[q] = v; px[q+1] = Math.round(v * 0.985); px[q+2] = Math.round(v * 0.96);
+      // Ligne de forme : cassure d'orientation entre pixels voisins. C'est ce
+      // qui fait apparaître les reliefs musculaires, les tendons, les plis.
+      // Près du bord, la surface fuit le regard : deux pixels voisins y sont
+      // éloignés de plusieurs millimètres sur le corps et leurs orientations
+      // divergent toujours. Y chercher un pli noircissait tout le pourtour des
+      // doigts.
+      if (!trait && facing[o] > 0.35) {
+        let pire = 1;
+        for (const [ox, oy] of [[-pas,0],[pas,0],[0,-pas],[0,pas]]) {
+          const qx = x + ox, qy = y + oy;
+          if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue;
+          const q = qy * w + qx;
+          if (!inside[q]) continue;
+          const dot = nx[o]*nx[q] + ny[o]*ny[q] + nz[o]*nz[q];
+          if (dot < pire) pire = dot;
+        }
+        if (pire < 0.88) trait = true; // une trentaine de degrés de cassure
+      }
+      if (trait) v = 30;
+
+      const k = o * 3;
+      px[k] = v; px[k+1] = v; px[k+2] = v;
     }
   }
+
+  if (plate && plate.id.startsWith('tete')) traceVisage({ px, w, h }, plate, r.frame);
 
   function crc32(buf) {
     let c; const t = crc32.t || (crc32.t = (() => { const a = []; for (let n = 0; n < 256; n++) { c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; a[n] = c; } return a; })());
@@ -240,30 +280,39 @@ function normalAt(p) {
   return best ? [best[3], best[4], best[5]] : [0, 0, 1];
 }
 
-function regionOf(p) {
-  if (p[1] > 1.44) return 'tete';
-  if (Math.abs(p[0]) > 0.30 && p[1] > 0.75) return p[1] < 0.99 && Math.abs(p[0]) > 0.40 ? 'main' : 'bras';
-  if (p[1] < 0.20) return 'pied';
-  if (p[1] < 0.94 && Math.abs(p[0]) > 0.03) return 'jambe';
-  return 'tronc';
-}
-
-const PLATE_BY_REGION = {
-  tete: ['tete-face', 'tete-profil', 'tete-dos'],
-  tronc: ['tronc-face', 'tronc-dos'],
-  bras: ['bras-face', 'bras-dos'],
-  main: ['main-dos', 'main-paume'],
-  jambe: ['jambe-face', 'jambe-dos', 'jambe-interne', 'jambe-externe'],
-  pied: ['pied-dos', 'pied-plante'],
+// La planche d'un point découle de sa localisation canonique, pas de ses
+// coordonnées. Un classement géométrique envoyait SP6, à trois cun au-dessus de
+// la malléole, sur la planche de la plante du pied, et HT1, au creux de
+// l'aisselle, sur celle du dos.
+const PLATE_BY_ZONE = {
+  torse:  ['tronc-face', 'tronc-dos'],
+  dos:    ['tronc-dos', 'tronc-face'],
+  hanche: ['tronc-dos', 'tronc-face'],
+  nuque:  ['tete-dos', 'tete-profil'],
+  tete:   ['tete-face', 'tete-profil', 'tete-dos'],
+  epaule: ['bras-face', 'bras-dos', 'tronc-dos', 'tronc-face'],
+  bras:   ['bras-face', 'bras-dos'],
+  main:   ['main-dos', 'main-paume'],
+  jambe:  ['jambe-face', 'jambe-dos', 'jambe-interne', 'jambe-externe'],
+  pied:   ['pied-dos', 'pied-plante'],
 };
 
-// Rattachement d'abord : chaque point rejoint la planche dont le regard
-// s'oppose le mieux à la normale de la peau en ce point.
+// Rattachement : parmi les planches qui montrent cette zone, celle dont le
+// regard s'oppose le mieux à la normale de la peau au point.
 const assign = {};
 Object.entries(POINTS_3D).forEach(([id, pos]) => {
   const n = normalAt(pos);
   let best = null;
-  PLATE_BY_REGION[regionOf(pos)].forEach((pid) => {
+  const rule = POINT_RULES[id] || {};
+  const zone = rule.zone || 'torse';
+  // Main, pied et flanc : la règle dit déjà de quel côté on regarde. La normale
+  // de la peau, elle, hésite sur une arête — le bord radial de la main tourne
+  // vers l'avant, et LI4 partait sur la planche de la paume.
+  const impose = zone === 'main' ? (rule.face === 'palmaire' ? 'main-paume' : 'main-dos')
+    : zone === 'pied' ? (rule.face === 'palmaire' ? 'pied-plante' : 'pied-dos')
+    : (zone === 'torse' && rule.face === 'side') ? 'tronc-profil' : null;
+  if (impose) { assign[id] = impose; return; }
+  (PLATE_BY_ZONE[zone] || PLATE_BY_ZONE.torse).forEach((pid) => {
     const pl = PLATES.find((x) => x.id === pid);
     const score = -V3.dot(n, V3.normalize(pl.dir));
     if (!best || score > best.score) best = { pid, score };
@@ -307,6 +356,102 @@ Object.entries(assign).forEach(([id, pid]) => {
   assignment[id] = { planche: pid, x: Math.round(pr.x * 10) / 10, y: Math.round(pr.y * 10) / 10 };
 });
 
+// ---------- Repères du visage ----------
+//
+// Le maillage est un « base mesh » : son crâne est lisse, sans yeux, sans nez,
+// sans bouche. Quinze points se situent pourtant par rapport à ces traits — le
+// coin interne de l'œil, l'aile du nez, l'extrémité du sourcil. Sur une planche
+// vierge, ils flottent sur un ovale et ne se lisent pas.
+//
+// On dessine donc le visage aux proportions canoniques, celles-là mêmes qui
+// servent à poser les points : menton à 0, ligne des yeux à mi-hauteur du
+// crâne, base du nez à 0,33, bouche à 0,19, sourcils à 0,57. Le trait est un
+// croquis de repérage, pas un relevé du modèle, et il est tracé plus clair
+// pour qu'on ne le confonde pas avec le contour, qui, lui, vient de la
+// géométrie.
+function traceVisage(img, plate, frame) {
+  const CHIN = L.chinY, HH = L.height - L.chinY;
+  let demi = 0.075;
+  {
+    let w = 0;
+    V.forEach((v) => {
+      if (v[1] > CHIN + HH * 0.4 && v[1] < CHIN + HH * 0.75) w = Math.max(w, Math.abs(v[0]));
+    });
+    demi = w;
+  }
+  // Profondeur du visage sur la ligne médiane, pour la vue de profil.
+  const zFront = (y) => {
+    let best = -Infinity;
+    V.forEach((v) => { if (Math.abs(v[1] - y) < 0.006 && Math.abs(v[0]) < 0.02 && v[2] > best) best = v[2]; });
+    return isFinite(best) ? best : 0.08;
+  };
+
+  const px = img.px, w = img.w, h = img.h;
+  const set = (x, y, c) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const o = (y * w + x) * 3;
+    px[o] = c; px[o+1] = c; px[o+2] = c;
+  };
+  const point3d = (lat, ht, dz) => {
+    const y = CHIN + ht * HH;
+    return [lat * demi, y, (dz === undefined ? zFront(y) : dz)];
+  };
+  const trait = (a, b, c) => {
+    const pa = project(frame, a), pb = project(frame, b);
+    const n = Math.max(2, Math.ceil(Math.hypot(pb.x - pa.x, pb.y - pa.y)));
+    for (let i = 0; i <= n; i++) {
+      const x = Math.round(pa.x + (pb.x - pa.x) * i / n);
+      const y = Math.round(pa.y + (pb.y - pa.y) * i / n);
+      set(x, y, c); set(x + 1, y, c); set(x, y + 1, c);
+    }
+  };
+  // Courbe passant par une suite de repères (lat, hauteur).
+  const courbe = (pts, c) => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      trait(point3d(pts[i][0], pts[i][1]), point3d(pts[i+1][0], pts[i+1][1]), c);
+    }
+  };
+  const G = 110; // gris du croquis
+
+  if (plate.id === 'tete-face') {
+    [1, -1].forEach((cote) => {
+      // Œil : deux arcs qui se rejoignent aux commissures.
+      const x0 = 0.17 * cote, x1 = 0.45 * cote;
+      courbe([[x0, 0.500], [0.24*cote, 0.522], [0.34*cote, 0.524], [x1, 0.500]], G);
+      courbe([[x0, 0.500], [0.26*cote, 0.478], [0.36*cote, 0.480], [x1, 0.500]], G);
+      // Iris
+      courbe([[0.26*cote, 0.505], [0.31*cote, 0.518], [0.36*cote, 0.505],
+              [0.31*cote, 0.492], [0.26*cote, 0.505]], G);
+      // Sourcil
+      courbe([[0.18*cote, 0.560], [0.28*cote, 0.582], [0.40*cote, 0.578], [0.48*cote, 0.556]], G);
+      // Aile du nez et bord du nez
+      courbe([[0.08*cote, 0.470], [0.10*cote, 0.390], [0.19*cote, 0.335],
+              [0.13*cote, 0.318], [0.05*cote, 0.330]], G);
+      // Sillon naso-génien
+      courbe([[0.21*cote, 0.330], [0.26*cote, 0.265], [0.25*cote, 0.205]], G);
+    });
+    // Bouche
+    courbe([[-0.21, 0.192], [-0.10, 0.212], [0, 0.200], [0.10, 0.212], [0.21, 0.192]], G);
+    courbe([[-0.21, 0.192], [-0.10, 0.168], [0.10, 0.168], [0.21, 0.192]], G);
+    // Sillon labio-mentonnier
+    courbe([[-0.13, 0.115], [0, 0.105], [0.13, 0.115]], G);
+    // Racine du nez
+    courbe([[-0.05, 0.560], [-0.04, 0.500]], G);
+    courbe([[0.05, 0.560], [0.04, 0.500]], G);
+  }
+
+  if (plate.id === 'tete-profil') {
+    // De profil on ne peut pas creuser la silhouette, qui vient du maillage.
+    // On pose seulement les traits internes, à leur hauteur exacte.
+    const z = (ht) => zFront(CHIN + ht * HH);
+    const P = (ht, recul) => [0.3 * demi, CHIN + ht * HH, z(ht) - recul];
+    trait(P(0.500, 0.012), P(0.500, 0.052), G);          // fente palpébrale
+    trait(P(0.560, 0.010), P(0.560, 0.055), G);          // sourcil
+    trait(P(0.192, 0.008), P(0.192, 0.045), G);          // bouche
+    trait(P(0.335, 0.006), P(0.335, 0.030), G);          // base du nez
+  }
+}
+
 // ---------- Écriture ----------
 const outDir = path.join(ROOT, 'assets', 'planches');
 if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
@@ -316,7 +461,7 @@ let total = 0;
 PLATES.forEach((pl) => {
   const t0 = Date.now();
   const r = renderPlate(pl);
-  const png = toPNG(r);
+  const png = toPNG(r, pl);
   fs.writeFileSync(path.join(outDir, pl.id + '.png'), png);
   total += png.length;
   manifest[pl.id] = { nom: pl.nom, w: r.w, h: r.h, pxParMetre: Math.round(r.frame.scale) };
