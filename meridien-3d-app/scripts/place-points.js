@@ -517,7 +517,10 @@ const COU_DEMI = (() => {
   // retient donc la plus petite largeur de la bande, plutôt qu'une hauteur
   // choisie d'avance, où le trapèze ou la mâchoire viennent fausser la mesure.
   let mini = Infinity;
-  for (let y = L.neckBase + 0.012; y < CHIN_Y - 0.008; y += 0.006) {
+  // La bande monte au-dessus du menton : le cou se poursuit derrière la
+  // mâchoire, et c'est là qu'il est le plus étroit. S'arrêter au menton
+  // mesurait encore le trapèze et donnait un cou de dix-sept centimètres.
+  for (let y = L.neckBase + 0.012; y < CHIN_Y + 0.030; y += 0.006) {
     let w = 0;
     V.forEach((v) => {
       if (Math.abs(v[1] - y) > 0.005 || v[2] < -0.07 || v[2] > 0.07) return;
@@ -656,9 +659,32 @@ function place(id, rule) {
       const x = rule.lat * headHalfWidth;
       if (rule.face === 'top') return { guess: [0, L.height - 0.005, 0], facing: [0, 1, 0] };
       if (rule.face === 'side') {
-        const dz = rule.avance || 0;
-        const sp = surfaceAt(y, 1, dz) || [0.09, y, 0];
-        return { guess: sp, facing: V3.normalize([1, 0, dz]) };
+        // Sur le côté du crâne, `avance` est une fraction d'avant en arrière :
+        // 0 à l'occiput, 1 au front. On fixe la profondeur, puis on prend le
+        // point le plus latéral à cette hauteur et à cette profondeur.
+        //
+        // Chercher « le plus loin dans la direction (1, 0, avance) », comme on
+        // faisait, réagissait brutalement à la forme du crâne : entre deux
+        // valeurs voisines l'arc temporal sautait de dix centimètres et la
+        // ligne de la Vésicule Biliaire autour de l'oreille se disloquait.
+        const frac = rule.avance === undefined ? 0.5 : rule.avance;
+        let zb = Infinity, zf = -Infinity;
+        for (let i = 0; i < V.length; i++) {
+          const v = V[i];
+          if (Math.abs(v[1] - y) > 0.008 || Math.abs(v[0]) > 0.06) continue;
+          if (v[2] < zb) zb = v[2];
+          if (v[2] > zf) zf = v[2];
+        }
+        if (!isFinite(zb)) return { guess: [0.09, y, 0], facing: [1, 0, 0], rayon: 0.05 };
+        const z = zb + (zf - zb) * frac;
+        let best = null;
+        for (let i = 0; i < V.length; i++) {
+          const v = V[i];
+          if (Math.abs(v[1] - y) > 0.008 || Math.abs(v[2] - z) > 0.012) continue;
+          if (!best || v[0] > best[0]) best = v;
+        }
+        return { guess: best ? [best[0], best[1], best[2]] : [0.09, y, z],
+          facing: [1, 0, 0], rayon: 0.035 };
       }
       // Comme pour le tronc : on lit la peau à la hauteur ET à l'écart latéral
       // voulus. Chercher « le point le plus en avant dans telle direction »
@@ -867,6 +893,44 @@ MERIDIANS.forEach((m) => m.points.forEach((pt) => {
     bouts.push('sur la ligne médiane du crâne');
   } else if (r.zone === 'cou') {
     bouts.push('sur le cou');
+  } else if (r.zone === 'main') {
+    const noms = ['pouce', 'index', 'majeur', 'annulaire', 'auriculaire'];
+    if (r.doigt) {
+      const cote = r.cote === 'radial' ? ', côté radial' : r.cote === 'ulnaire' ? ', côté ulnaire' : '';
+      bouts.push(r.t >= 0.8 || r.face === 'bout'
+        ? 'à l\'angle de l\'ongle du ' + noms[r.doigt - 1] + cote
+        : 'à la base du ' + noms[r.doigt - 1] + cote);
+    } else {
+      bouts.push(r.face === 'palmaire' ? 'dans la paume'
+        : r.face === 'bord' ? 'sur le bord ulnaire de la main' : 'sur le dos de la main');
+      if (r.entre && r.entre.length === 2) bouts.push('entre les ' + r.entre[0] + 'e et ' + r.entre[1] + 'e métacarpiens');
+      else if (r.entre) bouts.push('à l\'aplomb du ' + r.entre[0] + 'e métacarpien');
+    }
+  } else if (r.zone === 'pied') {
+    if (r.orteil) {
+      const cote = r.cote === 'medial' ? ', côté interne' : r.cote === 'lateral' ? ', côté externe' : '';
+      bouts.push(r.t >= 0.8
+        ? 'à l\'angle de l\'ongle du ' + (r.orteil === 1 ? 'gros orteil' : r.orteil + 'e orteil') + cote
+        : 'à la base du ' + (r.orteil === 1 ? 'gros orteil' : r.orteil + 'e orteil') + cote);
+    } else {
+      bouts.push(r.face === 'palmaire' ? 'à la plante du pied'
+        : r.face === 'bordOppose' ? 'sur le bord interne du pied'
+        : r.face === 'bord' ? 'sur le bord externe du pied' : 'sur le dos du pied');
+      if (r.entre && r.entre.length === 2) bouts.push('entre les ' + r.entre[0] + 'e et ' + r.entre[1] + 'e métatarsiens');
+    }
+  } else if (r.zone === 'tete') {
+    if (r.face === 'top') bouts.push('au sommet du crâne');
+    else if (r.face === 'side') bouts.push('sur le côté du crâne');
+    else if (Math.abs(r.lat) < 0.01) bouts.push('sur la ligne médiane de la face');
+    else bouts.push('sur la face');
+  } else if (r.zone === 'hanche') {
+    bouts.push('sur la fesse, entre le grand trochanter et le sacrum');
+  } else if (r.zone === 'perinee') {
+    bouts.push('au périnée');
+  } else if (r.zone === 'epaule') {
+    bouts.push('sur le moignon de l\'épaule');
+  } else if (r.zone === 'nuque') {
+    bouts.push('à la nuque, sous l\'occiput');
   }
   if (bouts.length) {
     const t = bouts.join(', ') + '.';

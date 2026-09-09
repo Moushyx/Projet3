@@ -52,8 +52,8 @@ const POINT_RULES = {
   // ---------------- Estomac : face antérieure, ligne mamelonnaire ----------------
   ST1:  { zone: 'tete', h: 0.47, lat: 0.31, face: 'front' },                    // sous la pupille, rebord orbitaire
   ST2:  { zone: 'tete', h: 0.43, lat: 0.31, face: 'front' },                    // trou sous-orbitaire
-  ST6:  { zone: 'tete', h: 0.13, lat: 0.72, face: 'side', avance: 0.35 },       // angle de la mâchoire, muscle masséter
-  ST8:  { zone: 'tete', h: 0.75, lat: 0.80, face: 'side', avance: 0.55 },       // angle frontal de la ligne des cheveux
+  ST6:  { zone: 'tete', h: 0.13, lat: 0.72, face: 'side', avance: 0.6 },       // angle de la mâchoire, muscle masséter
+  ST8:  { zone: 'tete', h: 0.75, lat: 0.80, face: 'side', avance: 0.78 },       // angle frontal de la ligne des cheveux
   ST25: { zone: 'torse', from: 'nombril', cun: 0, lat: 2.0, face: 'front' },     // 2 cun de part et d'autre du nombril
   ST36: { zone: 'jambe', cun: 21.0, angle: 25 },                                 // 3 cun sous le genou, un travers de doigt en dehors de la crête tibiale
   ST40: { zone: 'jambe', cun: 26.0, angle: 35 },                                 // 8 cun sous le genou
@@ -66,7 +66,7 @@ const POINT_RULES = {
   SP6:  { zone: 'jambe', cun: 31.0, angle: 255 },                                // 3 cun au-dessus de la malléole interne, bord postérieur du tibia
   SP9:  { zone: 'jambe', cun: 19.5, angle: 260 },                                 // sous le condyle interne du tibia, en dessous du genou
   SP10: { zone: 'jambe', cun: 16.0, angle: 290 },                                // 2 cun au-dessus du bord interne de la rotule
-  SP21: { zone: 'torse', from: 'CV22', cun: 8.0, lat: 6.0, face: 'side' },        // ligne axillaire moyenne, 6e espace intercostal
+  SP21: { zone: 'torse', from: 'CV22', cun: 9.6, lat: 6.0, face: 'side' },        // ligne axillaire moyenne, 6e espace intercostal
 
   // ---------------- Cœur : bord ulnaire antérieur du bras ----------------
   HT1:  { zone: 'bras', cun: 0.5, angle: 340 },                                  // centre du creux axillaire
@@ -81,7 +81,7 @@ const POINT_RULES = {
   SI8:  { zone: 'bras', cun: 9.5, angle: 240 },                                   // entre olécrâne et épicondyle médial
   SI11: { zone: 'dos', vertebre: 'T4', lat: 3.6, face: 'back' },                  // centre de la fosse sous-épineuse
   SI18: { zone: 'tete', h: 0.40, lat: 0.45, face: 'front' },                    // sous la pommette, bord inférieur de l'os zygomatique
-  SI19: { zone: 'tete', h: 0.42, lat: 0.95, face: 'side', avance: 0.25 },       // devant le tragus de l'oreille
+  SI19: { zone: 'tete', h: 0.42, lat: 0.95, face: 'side', avance: 0.52 },       // devant le tragus de l'oreille
 
   // ---------------- Vessie : deux lignes le long du rachis ----------------
   BL1:  { zone: 'tete', h: 0.50, lat: 0.17, face: 'front' },                    // angle interne de l'œil
@@ -106,7 +106,7 @@ const POINT_RULES = {
   KI27: { zone: 'torse', from: 'CV22', cun: 1.0, lat: 2.0, face: 'front' },        // sous la clavicule, 2 cun de la médiane
 
   // ---------------- Maître du Cœur : milieu de la face antérieure ----------------
-  PC3:  { zone: 'bras', cun: 9.0, angle: 0 },                                     // pli du coude, bord ulnaire du tendon du biceps
+  PC3:  { zone: 'bras', cun: 9.0, angle: 350 },                                     // pli du coude, bord ulnaire du tendon du biceps
   PC6:  { zone: 'bras', cun: 19.0, angle: 0 },                                    // 2 cun au-dessus du pli du poignet
   PC7:  { zone: 'bras', cun: 21.0, angle: 0 },                                    // milieu du pli du poignet
   PC8:  { zone: 'main', avance: 0.47, entre: [2, 3], face: 'palmaire' },        // centre de la paume, entre 2e et 3e métacarpiens
@@ -116,7 +116,7 @@ const POINT_RULES = {
   TE3:  { zone: 'main', avance: 0.53, entre: [4, 5] },                          // dos de la main, entre les têtes des 4e et 5e métacarpiens
   TE5:  { zone: 'bras', cun: 19.0, angle: 180 },                                  // 2 cun au-dessus du pli du poignet, face dorsale
   TE14: { zone: 'epaule', angle: 160 },                                           // dépression postérieure sous l'acromion
-  TE17: { zone: 'tete', h: 0.30, lat: 0.92, face: 'side', avance: -0.1 },       // derrière le lobe de l'oreille
+  TE17: { zone: 'tete', h: 0.3, lat: 0.92, face: 'side', avance: 0.4 },       // derrière le lobe de l'oreille
   TE23: { zone: 'tete', h: 0.57, lat: 0.42, face: 'front' },                    // extrémité externe du sourcil
 
   // ---------------- Vésicule Biliaire : ligne latérale ----------------
@@ -134,7 +134,7 @@ const POINT_RULES = {
   LR2:  { zone: 'pied', avance: 0.83, entre: [1, 2] },                          // dos du pied, devant la commissure des 1er et 2e orteils
   LR3:  { zone: 'pied', avance: 0.62, entre: [1, 2] },                          // dos du pied, entre 1er et 2e métatarsiens
   LR8:  { zone: 'jambe', cun: 18.0, angle: 250 },                                  // extrémité interne du pli poplité
-  LR14: { zone: 'torse', from: 'CV22', cun: 11.0, lat: 4.0, face: 'front' },        // 6e espace intercostal, sous le mamelon
+  LR14: { zone: 'torse', from: 'CV22', cun: 9.6, lat: 4.0, face: 'front' },        // 6e espace intercostal, sous le mamelon
 
   // ---------------- Vaisseau Conception : ligne médiane antérieure ----------------
   CV3:  { zone: 'torse', from: 'nombril', cun: 4.0, lat: 0, face: 'front' },
@@ -173,7 +173,7 @@ const MERIDIAN_ROUTE = {
   ] }],
 
   ST: [{ apres: 'ST8', via: [
-    { zone: 'tete', h: 0.16, lat: 0.55, face: 'side', avance: 0.5 },
+    { zone: 'tete', h: 0.75, lat: 0.55, face: 'side', avance: 0.78 },
     { zone: 'torse', from: 'CV22', cun: 0.5, lat: 4.0, face: 'front' },
     { zone: 'torse', from: 'CV22', cun: 8.0, lat: 4.0, face: 'front' },
     { zone: 'torse', from: 'nombril', cun: -3.0, lat: 2.0, face: 'front' },
