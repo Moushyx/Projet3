@@ -274,7 +274,7 @@ header {
 }
 .zone-head {
   display: flex; align-items: center; gap: 10px;
-  padding: 7px 8px 7px 10px;
+  padding: 8px 12px;
   background: var(--ink-3);
   border-bottom: 1px solid var(--line);
 }
@@ -293,13 +293,10 @@ header {
 
 .zone-view {
   position: relative;
-  height: 340px;
+  height: 360px;
   overflow: hidden;
   background: #fcfbf7;
-  touch-action: none;
-  cursor: grab;
 }
-.zone-view:active { cursor: grabbing; }
 .zone-img {
   position: absolute; top: 0; left: 0;
   user-select: none; -webkit-user-drag: none;
@@ -340,7 +337,7 @@ header {
 }
 
 @media (min-width: 760px) {
-  .zone-view { height: 420px; }
+  .zone-view { height: 460px; }
 }
 
 /* ---------- Barre d'outils : plus de deux entrées, elle défile ---------- */
@@ -421,61 +418,8 @@ header {
 .quiz-choix .point-chip.faux { opacity: 1; border-color: #d9534f; background: rgba(217,83,79,0.12); }
 .quiz-verdict { margin-top: 10px; }
 
-/* ---------- Repère de situation sur la planche ---------- */
-.zone-loc {
-  position: absolute; right: 8px; bottom: 8px;
-  height: 92px;
-  background: rgba(255,255,255,0.92);
-  border: 1px solid #c9ccd2;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-  overflow: hidden;
-  pointer-events: none;
-  transition: opacity 0.15s;
-}
-.zone-loc.inutile { opacity: 0; }
-.zone-loc-img { position: absolute; top: 0; left: 0; opacity: 0.75; }
-.zone-loc-pt {
-  position: absolute; width: 5px; height: 5px; border-radius: 50%;
-  background: #d92d20; transform: translate(-50%, -50%);
-  box-shadow: 0 0 0 1.5px rgba(255,255,255,0.9);
-}
-.zone-loc-cadre {
-  position: absolute;
-  border: 1.5px solid #1f4ed8;
-  background: rgba(31,78,216,0.10);
-  border-radius: 2px;
-}
-@media (min-width: 760px) { .zone-loc { height: 116px; } }
-
-/* ---------- Planche en plein écran ---------- */
-/* Sur un téléphone, la fiche laisse une lucarne de trois cents pixels. Pour
-   regarder une planche de près, il faut tout l'écran. */
-.zone.plein {
-  position: fixed; inset: 0; z-index: 60;
-  margin: 0; border: none; border-radius: 0;
-  display: flex; flex-direction: column;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.zone.plein .zone-view { flex: 1; height: auto; }
-.zone.plein .zone-loc { height: 132px; }
-body.planche-plein #info-panel { overflow: hidden; }
-
-/* Un élément transformé sert de référence aux positions fixes de ses
-   descendants : tant que la fiche garde son translate, la planche en plein
-   écran se cadre sur la fiche et non sur l'écran. */
-body.planche-plein #info-panel { transform: none; }
-
 /* Trajets des canaux sur la planche : le canal traité en couleur, les autres
    en gris très clair, comme les lignes de fond d'une planche d'atlas. */
 .zone-svg .canal { fill: none; stroke: #dcdfe4; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .zone-svg .canal.actif { stroke-width: 4; opacity: 0.8; }
 
-/* Un seul bouton nommé, plutôt que quatre symboles : la vue s'ouvre au bon
-   cadrage, le reste se fait au doigt. */
-.zone-btn.large {
-  width: auto; padding: 0 10px;
-  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em;
-  text-transform: uppercase; white-space: nowrap;
-}

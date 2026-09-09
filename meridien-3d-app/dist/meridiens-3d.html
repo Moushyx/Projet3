@@ -279,7 +279,7 @@ header {
 }
 .zone-head {
   display: flex; align-items: center; gap: 10px;
-  padding: 7px 8px 7px 10px;
+  padding: 8px 12px;
   background: var(--ink-3);
   border-bottom: 1px solid var(--line);
 }
@@ -298,13 +298,10 @@ header {
 
 .zone-view {
   position: relative;
-  height: 340px;
+  height: 360px;
   overflow: hidden;
   background: #fcfbf7;
-  touch-action: none;
-  cursor: grab;
 }
-.zone-view:active { cursor: grabbing; }
 .zone-img {
   position: absolute; top: 0; left: 0;
   user-select: none; -webkit-user-drag: none;
@@ -345,7 +342,7 @@ header {
 }
 
 @media (min-width: 760px) {
-  .zone-view { height: 420px; }
+  .zone-view { height: 460px; }
 }
 
 /* ---------- Barre d'outils : plus de deux entrées, elle défile ---------- */
@@ -426,64 +423,11 @@ header {
 .quiz-choix .point-chip.faux { opacity: 1; border-color: #d9534f; background: rgba(217,83,79,0.12); }
 .quiz-verdict { margin-top: 10px; }
 
-/* ---------- Repère de situation sur la planche ---------- */
-.zone-loc {
-  position: absolute; right: 8px; bottom: 8px;
-  height: 92px;
-  background: rgba(255,255,255,0.92);
-  border: 1px solid #c9ccd2;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-  overflow: hidden;
-  pointer-events: none;
-  transition: opacity 0.15s;
-}
-.zone-loc.inutile { opacity: 0; }
-.zone-loc-img { position: absolute; top: 0; left: 0; opacity: 0.75; }
-.zone-loc-pt {
-  position: absolute; width: 5px; height: 5px; border-radius: 50%;
-  background: #d92d20; transform: translate(-50%, -50%);
-  box-shadow: 0 0 0 1.5px rgba(255,255,255,0.9);
-}
-.zone-loc-cadre {
-  position: absolute;
-  border: 1.5px solid #1f4ed8;
-  background: rgba(31,78,216,0.10);
-  border-radius: 2px;
-}
-@media (min-width: 760px) { .zone-loc { height: 116px; } }
-
-/* ---------- Planche en plein écran ---------- */
-/* Sur un téléphone, la fiche laisse une lucarne de trois cents pixels. Pour
-   regarder une planche de près, il faut tout l'écran. */
-.zone.plein {
-  position: fixed; inset: 0; z-index: 60;
-  margin: 0; border: none; border-radius: 0;
-  display: flex; flex-direction: column;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.zone.plein .zone-view { flex: 1; height: auto; }
-.zone.plein .zone-loc { height: 132px; }
-body.planche-plein #info-panel { overflow: hidden; }
-
-/* Un élément transformé sert de référence aux positions fixes de ses
-   descendants : tant que la fiche garde son translate, la planche en plein
-   écran se cadre sur la fiche et non sur l'écran. */
-body.planche-plein #info-panel { transform: none; }
-
 /* Trajets des canaux sur la planche : le canal traité en couleur, les autres
    en gris très clair, comme les lignes de fond d'une planche d'atlas. */
 .zone-svg .canal { fill: none; stroke: #dcdfe4; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .zone-svg .canal.actif { stroke-width: 4; opacity: 0.8; }
 
-/* Un seul bouton nommé, plutôt que quatre symboles : la vue s'ouvre au bon
-   cadrage, le reste se fait au doigt. */
-.zone-btn.large {
-  width: auto; padding: 0 10px;
-  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em;
-  text-transform: uppercase; white-space: nowrap;
-}
 
 </style>
 
@@ -2567,23 +2511,17 @@ if (typeof module !== 'undefined') module.exports = { createEngine };
   // ---------------------------------------------------------------
   // Vue 2D de la zone
   // ---------------------------------------------------------------
-  // Une planche d'acupuncture ne montre pas un gros plan : elle montre une
-  // région entière — la tête, la main, le bras — avec le point en rouge, ses
-  // voisins en gris, et les cotes en cun qui le relient à son repère osseux.
-  // C'est la cote qui situe le point ; un zoom serré sur un centimètre de peau
-  // ne dit rien de l'endroit où l'on se trouve.
+  // Une planche fixe, la région entière, sans agrandissement.
   //
-  // La planche s'affiche donc entière par défaut. Le doigt peut ensuite
-  // l'agrandir, et le bouton ⤢ la remet en place.
+  // L'agrandissement a été retiré : il promettait une précision que les
+  // positions n'ont pas partout, et un point posé à un centimètre près se
+  // voit d'autant mieux qu'on s'approche. La planche sert donc à situer —
+  // « c'est sur la face interne, au-dessus de la cheville » — et c'est le
+  // texte, sous elle, qui donne la mesure exacte.
   function buildZoneView(pointId, side, opts) {
     const info = PLATE_POINTS[pointId];
     if (!info || !PLATES_INFO[info.planche]) return '';
     const plate = PLATES_INFO[info.planche];
-    // Une planche du tronc porte soixante-quinze points. Les afficher tous
-    // donne un essaim où l'on ne distingue plus rien. Une planche d'atlas ne
-    // montre que le canal traité et ce qui l'entoure de près : on garde donc
-    // les points du même canal, plus tout ce qui se trouve à moins de six
-    // centimètres — c'est ce voisinage-là qui sert à se repérer.
     const canal = (id) => { const f = chercherPoint(id); return f ? f.meridian.id : ''; };
     const monCanal = canal(pointId);
     const pxm = plate.pxParMetre || 2000;
@@ -2613,68 +2551,13 @@ if (typeof module !== 'undefined') module.exports = { createEngine };
       <div class="zone" data-zone='${JSON.stringify(data).replace(/'/g, '&#39;')}'>
         <div class="zone-head">
           <span class="zone-nom">${plate.nom}${side === 'L' ? ' · gauche' : ''}</span>
-          <span class="zone-zoom">
-            <button class="zone-btn large" data-zoom="fit" type="button">Vue d'ensemble</button>
-            <button class="zone-btn" data-zoom="plein" type="button" aria-label="Plein écran">⛶</button>
-          </span>
         </div>
         <div class="zone-view">
           <img class="zone-img" alt="${plate.nom}" src="${data.src}" draggable="false" />
           <svg class="zone-svg" aria-hidden="true"></svg>
-          <div class="zone-loc" aria-hidden="true">
-            <img class="zone-loc-img" src="${data.src}" draggable="false" />
-            <span class="zone-loc-pt"></span>
-            <span class="zone-loc-cadre"></span>
-          </div>
         </div>
-        <div class="zone-pied">Point en rouge, voisins en gris. Les cotes sont en cun.</div>
+        <div class="zone-pied">Situation sur la région. La mesure exacte est donnée sous la planche.</div>
       </div>`;
-  }
-
-  const zoneEtat = new WeakMap();
-
-  // Cadrage entier de la planche.
-  function zoneFit(d, vw, vh) {
-    const k = Math.min(vw / d.w, vh / d.h) * 0.96;
-    return { k, tx: (vw - d.w * k) / 2, ty: (vh - d.h * k) / 2 };
-  }
-
-  // Cadrage d'ouverture : exactement ce qu'il y a à montrer — le point, sa
-  // mesure, et les voisins qui l'entourent de près. Rien à régler, rien à
-  // recadrer : la vue s'ouvre sur la bonne chose.
-  //
-  // Une fenêtre de taille fixe, comme on faisait, tombait juste ou à côté
-  // selon la région : sur un poignet elle cadrait le vide, sur un dos elle
-  // coupait la mesure.
-  function zoneDepart(d, vw, vh) {
-    let x0 = d.cx, y0 = d.cy, x1 = d.cx, y1 = d.cy;
-    const tenir = (x, y) => {
-      if (x < x0) x0 = x; if (x > x1) x1 = x;
-      if (y < y0) y0 = y; if (y > y1) y1 = y;
-    };
-    d.cotes.forEach((c) => { tenir(c.ax, c.ay); if (c.bx !== undefined) tenir(c.bx, c.by); });
-    const rayon = 0.085 * d.pxm;
-    let seul = !d.cotes.length;
-    d.points.forEach((p) => {
-      if (p.id !== d.actif && Math.hypot(p.x - d.cx, p.y - d.cy) < rayon) { tenir(p.x, p.y); seul = false; }
-    });
-    // Un point seul sur sa planche — KI1 sous la plante — n'a rien à cadrer
-    // autour de lui : on montre la région entière, qui, elle, se reconnaît.
-    if (seul) return zoneFit(d, vw, vh);
-    const marge = 0.035 * d.pxm;
-    x0 -= marge; y0 -= marge; x1 += marge; y1 += marge;
-
-    let k = Math.min(vw / (x1 - x0), vh / (y1 - y0));
-    // Ni loupe ni vue satellite : entre douze et quarante centimètres de corps
-    // dans la hauteur du cadre.
-    // Plancher de contexte : jamais moins de dix-huit centimètres de corps dans
-    // la hauteur du cadre, ni moins de la moitié d'une planche déjà petite.
-    const hauteurPlanche = d.h / d.pxm;
-    const mini = Math.min(0.18, hauteurPlanche * 0.5);
-    k = Math.min(k, vh / (mini * d.pxm));
-    k = Math.max(k, vh / (0.40 * d.pxm), zoneFit(d, vw, vh).k);
-    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-    return { k, tx: vw / 2 - (d.miroir ? d.w - mx : mx) * k, ty: vh / 2 - my * k };
   }
 
   function layoutZone(root) {
@@ -2687,292 +2570,82 @@ if (typeof module !== 'undefined') module.exports = { createEngine };
     const vw = view.clientWidth, vh = view.clientHeight;
     if (!vw || !vh) return;
 
-    let st = zoneEtat.get(el);
-    // Un changement de taille franc — passage en plein écran, rotation — refait
-    // le cadrage. Une variation légère, comme la barre d'adresse qui se replie,
-    // ne doit pas défaire l'agrandissement en cours.
-    if (st && (Math.abs(st.vh - vh) > st.vh * 0.3 || Math.abs(st.vw - vw) > st.vw * 0.3)) st = null;
-    if (st) { st.vw = vw; st.vh = vh; st.base = zoneFit(d, vw, vh).k; }
-    if (!st) {
-      st = zoneDepart(d, vw, vh);
-      st.base = zoneFit(d, vw, vh).k;
-      st.vw = vw; st.vh = vh;
-      zoneEtat.set(el, st);
-    }
-    // Bornes : elles ne s'appliquent qu'après une manipulation. Sur le cadrage
-    // d'ouverture, elles décalaient la vue quand le point était près d'un bord
-    // de la planche — le point cessait d'être au centre.
-    if (st.manuel) {
-      const cw = d.w * st.k, ch = d.h * st.k;
-      st.tx = cw <= vw ? (vw - cw) / 2 : Math.min(0, Math.max(vw - cw, st.tx));
-      st.ty = ch <= vh ? (vh - ch) / 2 : Math.min(0, Math.max(vh - ch, st.ty));
-    }
-
-    const X = (x) => st.tx + (d.miroir ? d.w - x : x) * st.k;
-    const Y = (y) => st.ty + y * st.k;
+    const k = Math.min(vw / d.w, vh / d.h) * 0.97;
+    const tx = (vw - d.w * k) / 2, ty = (vh - d.h * k) / 2;
+    const X = (x) => tx + (d.miroir ? d.w - x : x) * k;
+    const Y = (y) => ty + y * k;
 
     img.style.width = d.w + 'px';
     img.style.height = d.h + 'px';
     img.style.transformOrigin = '0 0';
     img.style.transform = d.miroir
-      ? `translate(${st.tx + d.w * st.k}px, ${st.ty}px) scale(${-st.k}, ${st.k})`
-      : `translate(${st.tx}px, ${st.ty}px) scale(${st.k})`;
+      ? `translate(${tx + d.w * k}px, ${ty}px) scale(${-k}, ${k})`
+      : `translate(${tx}px, ${ty}px) scale(${k})`;
 
-    // ---- Repères, dessinés en pixels d'écran : ils gardent leur taille quel
-    // que soit l'agrandissement, comme sur une planche imprimée.
     const parts = [];
-    // Le trajet du canal, d'abord : c'est le fond de la planche. Les points s'y
-    // posent, la mesure s'y rapporte.
+    const etiquettes = [];
+    const boites = [];
+    function poser(txt, cands, cls) {
+      const larg = String(txt).length * 6.4 + 4;
+      for (let i = 0; i < cands.length; i++) {
+        const [cx, cy, anc] = cands[i];
+        const x0 = anc === 'end' ? cx - larg : anc === 'middle' ? cx - larg / 2 : cx;
+        const r = { x0, y0: cy - 10, x1: x0 + larg, y1: cy + 3 };
+        const gene = boites.some((b) => !(r.x1 < b.x0 || r.x0 > b.x1 || r.y1 < b.y0 || r.y0 > b.y1));
+        if (!gene) { boites.push(r); return `<text class="${cls}" x="${cx}" y="${cy}" text-anchor="${anc}">${txt}</text>`; }
+      }
+      return '';
+    }
+
+    // Trajet du canal : le fond de la planche.
     const trajets = (typeof PLATE_PATHS !== 'undefined' && PLATE_PATHS[d.planche]) || {};
     Object.entries(trajets).forEach(([mid, pieces]) => {
       const actif = mid === d.canal;
       pieces.forEach((pl) => {
         let dd = '';
         for (let i = 0; i < pl.length; i += 2) {
-          const x = X(pl[i]), y = Y(pl[i + 1]);
-          if (x < -60 || y < -60 || x > vw + 60 || y > vh + 60) { dd += ''; }
-          dd += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1);
+          dd += (i === 0 ? 'M' : 'L') + X(pl[i]).toFixed(1) + ' ' + Y(pl[i + 1]).toFixed(1);
         }
         parts.push(`<path class="canal${actif ? ' actif' : ''}" d="${dd}"${actif ? ` style="stroke:${d.couleur}"` : ''}/>`);
       });
     });
 
-    // Placement des étiquettes : chacune essaie d'abord sa position naturelle,
-    // puis les autres côtés du repère. Si aucune ne tient sans recouvrir une
-    // étiquette déjà posée, on ne l'écrit pas — un nom illisible parce qu'il
-    // en croise un autre ne renseigne personne.
-    const boites = [];
-    function poser(txt, cands, cls) {
-      const larg = String(txt).length * 6.8 + 4;
-      for (let i = 0; i < cands.length; i++) {
-        const [cx, cy, anc] = cands[i];
-        const x0 = anc === 'end' ? cx - larg : anc === 'middle' ? cx - larg / 2 : cx;
-        const r = { x0, y0: cy - 11, x1: x0 + larg, y1: cy + 3 };
-        const gene = boites.some((b) => !(r.x1 < b.x0 || r.x0 > b.x1 || r.y1 < b.y0 || r.y0 > b.y1));
-        if (!gene || i === cands.length - 1) {
-          if (gene) return '';
-          boites.push(r);
-          return `<text class="${cls}" x="${cx}" y="${cy}" text-anchor="${anc}">${txt}</text>`;
-        }
-      }
-      return '';
-    }
-    // Le nom du point cherché passe avant tout le monde.
     const AX = X(d.cx), AY = Y(d.cy);
-    const etiquetteActive = d.muet ? '' : poser(d.actif, [[AX + 12, AY + 6, 'start']], 'pt-actif-txt');
+    const etiquetteActive = d.muet ? '' : poser(d.actif, [[AX + 11, AY + 5, 'start']], 'pt-actif-txt');
 
-    // Les étiquettes sont empilées à part et dessinées en dernier : sinon une
-    // pastille voisine vient s'asseoir sur le chiffre de la mesure.
-    const etiquettes = [];
-    (d.muet ? [] : d.cotes).forEach((c) => {
-      const ax = X(c.ax), ay = Y(c.ay);
-      if (c.bx === undefined) {
-        parts.push(`<circle class="cote-pt" cx="${ax}" cy="${ay}" r="3"/>`);
-        etiquettes.push(poser(c.texte, [[ax + 9, ay + 4, 'start'], [ax - 9, ay + 4, 'end'], [ax, ay - 10, 'middle']], 'cote-txt'));
-        return;
-      }
-      const bx = X(c.bx), by = Y(c.by);
-      const dx = bx - ax, dy = by - ay;
-      const len = Math.hypot(dx, dy) || 1;
-      const nx = -dy / len * 6, ny = dx / len * 6;   // normale, pour les embouts
-      parts.push(`<line class="cote" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"/>`);
-      parts.push(`<line class="cote" x1="${ax - nx}" y1="${ay - ny}" x2="${ax + nx}" y2="${ay + ny}"/>`);
-      parts.push(`<line class="cote" x1="${bx - nx}" y1="${by - ny}" x2="${bx + nx}" y2="${by + ny}"/>`);
-      const mx = (ax + bx) / 2, my = (ay + by) / 2;
-      // L'étiquette se pose perpendiculairement à la cote, du côté opposé au
-      // point : sur une mesure courte, la poser dans l'axe la ferait chevaucher
-      // la pastille et le nom du repère.
-      const ux = nx / 6, uy = ny / 6;
-      // Le nom du point est toujours écrit à sa droite : la mesure se pose donc
-      // à gauche quand elle est verticale, au-dessus quand elle est
-      // horizontale. Sur une cote d'un centimètre, les deux se chevauchaient.
-      const sgn = Math.abs(ux) >= 0.3 ? (ux < 0 ? 1 : -1) : (uy < 0 ? 1 : -1);
-      const lx = mx + ux * 26 * sgn, ly = my + uy * 26 * sgn;
-      etiquettes.push(`<text class="cote-txt" x="${lx}" y="${ly + 4}" text-anchor="middle">${c.texte}</text>`);
-      if (c.depart) {
-        // Le nom du repère se met dans le prolongement de la cote, au-delà de
-        // son origine : il ne peut alors croiser ni la mesure ni le point.
-        const dx2 = -(bx - ax) / len, dy2 = -(by - ay) / len;
-        const anc = dx2 < -0.3 ? 'end' : dx2 > 0.3 ? 'start' : 'middle';
-        etiquettes.push(poser(c.depart, [[ax + dx2 * 12, ay + dy2 * 12 + 4, anc],
-          [ax + dx2 * 22, ay + dy2 * 22 + 4, anc]], 'cote-src'));
-      }
-    });
-
-    // Les voisins restent muets tant qu'on n'a pas agrandi : sur un visage, une
-    // dizaine d'étiquettes se recouvrent et cachent ce qu'elles désignent.
-    // Comme sur une planche d'atlas, seul le point cherché est nommé.
-    const nomme = d.points.length <= 16 || st.k > st.base * 1.5;
     d.points.forEach((pt) => {
       if (pt.id === d.actif) return;
       const x = X(pt.x), y = Y(pt.y);
-      if (x < -20 || y < -20 || x > vw + 20 || y > vh + 20) return;
-      parts.push(`<circle class="pt-hit" data-pt="${pt.id}" cx="${x}" cy="${y}" r="13"/>`);
-      parts.push(`<circle class="pt" cx="${x}" cy="${y}" r="4.5"/>`);
-      if (nomme) etiquettes.push(poser(pt.id, [[x + 8, y + 4, 'start'], [x - 8, y + 4, 'end'],
-        [x, y - 9, 'middle'], [x, y + 16, 'middle']], 'pt-txt'));
+      parts.push(`<circle class="pt-hit" data-pt="${pt.id}" cx="${x}" cy="${y}" r="12"/>`);
+      parts.push(`<circle class="pt" cx="${x}" cy="${y}" r="3.6"/>`);
+      etiquettes.push(poser(pt.id, [[x + 7, y + 4, 'start'], [x - 7, y + 4, 'end'],
+        [x, y - 8, 'middle'], [x, y + 14, 'middle']], 'pt-txt'));
     });
 
-    parts.push(`<circle class="pt-actif-halo" cx="${AX}" cy="${AY}" r="13"/>`);
-    parts.push(`<circle class="pt-actif" cx="${AX}" cy="${AY}" r="6.5"/>`);
+    parts.push(`<circle class="pt-actif-halo" cx="${AX}" cy="${AY}" r="12"/>`);
+    parts.push(`<circle class="pt-actif" cx="${AX}" cy="${AY}" r="6"/>`);
     etiquettes.push(etiquetteActive);
 
     svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
     svg.setAttribute('width', vw);
     svg.setAttribute('height', vh);
     svg.innerHTML = parts.concat(etiquettes).join('');
-
-    // ---- Repère de situation ----
-    // La planche entière en miniature, avec le point et le rectangle de ce
-    // qu'on regarde. C'est ce qui manquait : agrandir sans savoir où l'on est
-    // revient à regarder la peau au microscope.
-    const loc = el.querySelector('.zone-loc');
-    if (loc) {
-      const lh = loc.clientHeight || 92;
-      const kl = lh / d.h;
-      const lw = d.w * kl;
-      loc.style.width = lw + 'px';
-      const limg = loc.querySelector('.zone-loc-img');
-      limg.style.width = lw + 'px';
-      limg.style.height = lh + 'px';
-      // La miniature suit le côté montré : sans cela, le point et le cadre,
-      // eux calculés en miroir, tombaient à côté du dessin.
-      limg.style.transformOrigin = '50% 50%';
-      limg.style.transform = d.miroir ? 'scaleX(-1)' : 'none';
-      const lx = (x) => (d.miroir ? d.w - x : x) * kl;
-      const pt = loc.querySelector('.zone-loc-pt');
-      pt.style.left = lx(d.cx) + 'px';
-      pt.style.top = d.cy * kl + 'px';
-      // Rectangle : la portion de planche visible dans le cadre.
-      const cadre = loc.querySelector('.zone-loc-cadre');
-      const vx0 = -st.tx / st.k, vy0 = -st.ty / st.k;
-      const vw0 = vw / st.k, vh0 = vh / st.k;
-      // vx0 est déjà exprimé dans le repère montré : le remiroiter décalait le
-      // rectangle à l'opposé du point.
-      cadre.style.left = Math.max(0, vx0 * kl) + 'px';
-      cadre.style.top = Math.max(0, vy0 * kl) + 'px';
-      cadre.style.width = Math.min(lw, vw0 * kl) + 'px';
-      cadre.style.height = Math.min(lh, vh0 * kl) + 'px';
-      loc.classList.toggle('inutile', vw0 >= d.w && vh0 >= d.h);
-    }
   }
 
   function wireZone(root) {
     const el = root.querySelector('.zone');
     if (!el) return;
-    const d = JSON.parse(el.dataset.zone);
     const view = el.querySelector('.zone-view');
     const img = el.querySelector('.zone-img');
 
-    const zoomer = (fact, cx, cy) => {
-      const st = zoneEtat.get(el);
-      if (!st) return;
-      const vw = view.clientWidth, vh = view.clientHeight;
-      const px = cx === undefined ? vw / 2 : cx;
-      const py = cy === undefined ? vh / 2 : cy;
-      st.manuel = true;
-      const k2 = Math.max(st.base * 0.9, Math.min(st.base * 4, st.k * fact));
-      // On agrandit autour du doigt : le pixel visé ne bouge pas.
-      st.tx = px - (px - st.tx) * (k2 / st.k);
-      st.ty = py - (py - st.ty) * (k2 / st.k);
-      st.k = k2;
-      layoutZone(root);
-    };
-
-    el.querySelectorAll('.zone-btn').forEach((b) => {
-      b.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const mode = b.dataset.zoom;
-        if (mode === 'plein') {
-          // Plein écran : sur un téléphone, c'est la seule façon de regarder
-          // une planche de près sans perdre de vue ce qui l'entoure.
-          el.classList.toggle('plein');
-          b.textContent = el.classList.contains('plein') ? '✕' : '⛶';
-          document.body.classList.toggle('planche-plein', el.classList.contains('plein'));
-          zoneEtat.delete(el);
-          requestAnimationFrame(() => layoutZone(root));
-          return;
-        }
-        if (mode === 'fit') {
-          // Bascule entre la vue d'ensemble et le cadrage du point.
-          const w2 = view.clientWidth, h2 = view.clientHeight;
-          const st = zoneEtat.get(el);
-          const ens = st && st.ensemble;
-          const f = ens ? zoneDepart(d, w2, h2) : zoneFit(d, w2, h2);
-          zoneEtat.set(el, Object.assign(f, { base: zoneFit(d, w2, h2).k, vw: w2, vh: h2,
-            manuel: !ens, ensemble: !ens }));
-          b.textContent = ens ? "Vue d'ensemble" : 'Revenir au point';
-          layoutZone(root);
-        } else zoomer(mode === 'in' ? 1.5 : 1 / 1.5);
-      });
-    });
-
-    // Doigt : un doigt déplace, deux doigts agrandissent. Les événements sont
-    // arrêtés ici, sinon la fiche défile sous la planche.
-    let pts = new Map(), lastD = 0, lastC = null;
-    const rect = () => view.getBoundingClientRect();
-    view.addEventListener('touchstart', (e) => {
-      const r = rect();
-      pts.clear();
-      Array.from(e.touches).forEach((t) => pts.set(t.identifier, { x: t.clientX - r.left, y: t.clientY - r.top }));
-      lastD = 0; lastC = null;
-      if (e.touches.length > 1) e.preventDefault();
-    }, { passive: false });
-    view.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      const st = zoneEtat.get(el);
-      if (!st) return;
-      const r = rect();
-      const now = Array.from(e.touches).map((t) => ({ id: t.identifier, x: t.clientX - r.left, y: t.clientY - r.top }));
-      if (now.length === 1) {
-        const p = pts.get(now[0].id);
-        if (p) { st.manuel = true; st.tx += now[0].x - p.x; st.ty += now[0].y - p.y; layoutZone(root); }
-      } else if (now.length >= 2) {
-        const dist = Math.hypot(now[0].x - now[1].x, now[0].y - now[1].y);
-        const cx = (now[0].x + now[1].x) / 2, cy = (now[0].y + now[1].y) / 2;
-        if (lastD) {
-          const st2 = zoneEtat.get(el);
-          st2.manuel = true;
-          const k2 = Math.max(st2.base * 0.9, Math.min(st2.base * 4, st2.k * (dist / lastD)));
-          st2.tx = cx - (cx - st2.tx) * (k2 / st2.k) + (lastC ? cx - lastC.x : 0);
-          st2.ty = cy - (cy - st2.ty) * (k2 / st2.k) + (lastC ? cy - lastC.y : 0);
-          st2.k = k2;
-          layoutZone(root);
-        }
-        lastD = dist; lastC = { x: cx, y: cy };
-      }
-      pts.clear();
-      now.forEach((p) => pts.set(p.id, p));
-    }, { passive: false });
-    view.addEventListener('touchend', () => { pts.clear(); lastD = 0; lastC = null; });
-
-    // Souris, pour l'usage sur ordinateur.
-    let drag = null;
-    view.addEventListener('mousedown', (e) => { drag = { x: e.clientX, y: e.clientY }; e.preventDefault(); });
-    window.addEventListener('mousemove', (e) => {
-      if (!drag) return;
-      const st = zoneEtat.get(el);
-      st.manuel = true;
-      st.tx += e.clientX - drag.x; st.ty += e.clientY - drag.y;
-      drag = { x: e.clientX, y: e.clientY };
-      layoutZone(root);
-    });
-    window.addEventListener('mouseup', () => { drag = null; });
-    view.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const r = rect();
-      zoomer(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top);
-    }, { passive: false });
-
-    // Toucher un voisin ouvre sa fiche : c'est la façon naturelle de circuler
-    // dans une région. On distingue le tap du déplacement au déplacement même.
+    // Toucher un voisin ouvre sa fiche : c'est la seule interaction qui reste.
     let depart = null;
     view.addEventListener('pointerdown', (e) => { depart = { x: e.clientX, y: e.clientY }; });
     view.addEventListener('pointerup', (e) => {
       if (!depart) return;
       const bouge = Math.hypot(e.clientX - depart.x, e.clientY - depart.y);
       depart = null;
-      if (bouge > 6) return;
+      if (bouge > 8) return;
       const cible = document.elementFromPoint(e.clientX, e.clientY);
       const id = cible && cible.getAttribute && cible.getAttribute('data-pt');
       if (id) ouvrirPoint(id);
@@ -2981,10 +2654,6 @@ if (typeof module !== 'undefined') module.exports = { createEngine };
     if (img.complete) layoutZone(root);
     else img.addEventListener('load', () => layoutZone(root));
     requestAnimationFrame(() => layoutZone(root));
-    // Le cadre change de taille en plein écran, à la rotation, quand la barre
-    // d'adresse se replie. Un rendez-vous unique après le clic ne suffit pas :
-    // la mise en page n'est pas encore faite et la planche restait dessinée
-    // aux dimensions de la lucarne.
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(() => layoutZone(root));
       ro.observe(view);
