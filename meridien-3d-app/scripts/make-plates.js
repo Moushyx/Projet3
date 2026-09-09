@@ -173,67 +173,77 @@ function renderPlate(plate) {
   return { frame, depth, shade, facing, nx, ny, nz, inside, w, h };
 }
 
-// ---------- Mise en image : dessin au trait ----------
-// Pas de modelé : un aplat très clair, et des traits noirs là où la surface
-// se replie. Sur une planche destinée à situer un point au millimètre, les
-// dégradés d'ombre ne font que brouiller la lecture.
+// ---------- Mise en image : silhouette ----------
+//
+// Le plus simple qui se lise. Un aplat franc pour le corps, un contour épais,
+// et rien d'autre — sauf les plis assez marqués pour qu'on reconnaisse une
+// main d'une moufle.
+//
+// Les versions précédentes posaient un corps à 243 sur un papier à 252 : neuf
+// valeurs d'écart sur deux cent cinquante-cinq. Le dessin était juste, et
+// invisible sur un téléphone. Elles ajoutaient par-dessus un réseau de traits
+// de relief d'égale importance, qui brouillait le peu qu'on voyait.
+const PAPIER = [252, 251, 247];
+const CORPS = [233, 231, 225];
+const CONTOUR = [45, 43, 40];
+const PLI = [150, 147, 141];
+
 function toPNG(r, plate) {
-  const { w, h, depth, facing, nx, ny, nz, inside } = r;
-  // Les traits de forme se lisent sur une distance du corps, pas sur un pixel :
-  // à 4 200 pixels par mètre, deux pixels voisins du visage ne diffèrent que
-  // d'un degré et le nez, la bouche et les paupières disparaissaient du croquis.
-  // On compare donc les orientations à deux millimètres de distance.
-  const pas = Math.max(1, Math.min(4, Math.round(r.frame.scale * 0.0008)));
+  const { w, h, depth, nx, ny, nz, inside } = r;
   const px = new Uint8Array(w * h * 3);
-  for (let i = 0; i < w * h; i++) { px[i*3] = 252; px[i*3+1] = 251; px[i*3+2] = 247; }
 
   const dAt = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? Infinity : depth[y * w + x];
   const inAt = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : inside[y * w + x];
+
+  // 0 rien · 1 pli · 2 contour
+  const trait = new Uint8Array(w * h);
+  // Les plis se mesurent sur une distance du corps, non sur un pixel : à
+  // quatre mille pixels par mètre, deux pixels voisins d'une joue ne diffèrent
+  // que d'un degré.
+  const pas = Math.max(1, Math.min(4, Math.round(r.frame.scale * 0.0008)));
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const o = y * w + x;
       if (!inside[o]) continue;
-
-      // Papier légèrement chaud, corps à peine plus dense : la planche doit se
-      // lire comme un dessin, pas comme un rendu.
-      let v = facing[o] < 0.30 ? 234 : 243;
-      let teinte = 1;
-
-      // Contour : rupture de profondeur, ou bord de la silhouette.
+      if (!inAt(x-1, y) || !inAt(x+1, y) || !inAt(x, y-1) || !inAt(x, y+1)) { trait[o] = 2; continue; }
       const d = depth[o];
-      const silhouette = !inAt(x-1, y) || !inAt(x+1, y) || !inAt(x, y-1) || !inAt(x, y+1);
       const saut = Math.max(
         Math.abs(dAt(x-1, y) - d), Math.abs(dAt(x+1, y) - d),
         Math.abs(dAt(x, y-1) - d), Math.abs(dAt(x, y+1) - d)
       );
-      let trait = silhouette || !isFinite(saut) || saut > 0.004;
-
-      // Ligne de forme : cassure d'orientation entre pixels voisins. C'est ce
-      // qui fait apparaître les reliefs musculaires, les tendons, les plis.
-      // Près du bord, la surface fuit le regard : deux pixels voisins y sont
-      // éloignés de plusieurs millimètres sur le corps et leurs orientations
-      // divergent toujours. Y chercher un pli noircissait tout le pourtour des
-      // doigts.
-      if (!trait && facing[o] > 0.35) {
-        let pire = 1;
-        for (const [ox, oy] of [[-pas,0],[pas,0],[0,-pas],[0,pas]]) {
-          const qx = x + ox, qy = y + oy;
-          if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue;
-          const q = qy * w + qx;
-          if (!inside[q]) continue;
-          const dot = nx[o]*nx[q] + ny[o]*ny[q] + nz[o]*nz[q];
-          if (dot < pire) pire = dot;
-        }
-        if (pire < 0.88) { trait = true; teinte = 2; } // une trentaine de degrés
+      if (!isFinite(saut) || saut > 0.004) { trait[o] = 2; continue; }
+      // Pli : seulement les cassures franches — l'écart entre deux doigts, la
+      // jonction du bras et du tronc. Le modelé musculaire est laissé de côté.
+      let pire = 1;
+      for (const [ox, oy] of [[-pas,0],[pas,0],[0,-pas],[0,pas]]) {
+        const qx = x + ox, qy = y + oy;
+        if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue;
+        const q = qy * w + qx;
+        if (!inside[q]) continue;
+        const dot = nx[o]*nx[q] + ny[o]*ny[q] + nz[o]*nz[q];
+        if (dot < pire) pire = dot;
       }
-      // Hiérarchie du trait : le contour est net, le relief intérieur discret.
-      // Un trait uniforme donnait un fouillis de rayures d'égale importance.
-      if (trait) v = teinte === 2 ? 152 : 38;
-
-      const k = o * 3;
-      px[k] = v; px[k+1] = Math.round(v * 0.995); px[k+2] = Math.round(v * 0.975);
+      if (pire < 0.55) trait[o] = 1;   // une soixantaine de degrés
     }
+  }
+
+  // Le contour est épaissi d'un pixel : à la taille où la planche est
+  // regardée, un trait d'un pixel disparaît.
+  const epais = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (trait[y * w + x] !== 2) continue;
+      for (const [ox, oy] of [[0,0],[1,0],[0,1],[-1,0],[0,-1]]) {
+        const qx = x + ox, qy = y + oy;
+        if (qx >= 0 && qy >= 0 && qx < w && qy < h) epais[qy * w + qx] = 1;
+      }
+    }
+  }
+
+  for (let i = 0; i < w * h; i++) {
+    const c = epais[i] ? CONTOUR : trait[i] === 1 ? PLI : inside[i] ? CORPS : PAPIER;
+    px[i*3] = c[0]; px[i*3+1] = c[1]; px[i*3+2] = c[2];
   }
 
   if (plate && plate.id.startsWith('tete')) traceVisage({ px, w, h }, plate, r.frame);

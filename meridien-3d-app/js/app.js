@@ -149,10 +149,12 @@
       return '';
     }
 
-    // Trajet du canal : le fond de la planche.
+    // Le trajet du canal traité, et lui seul. Les treize autres, tracés en gris
+    // par-dessus, formaient un écheveau qui n'apprenait rien.
     const trajets = (typeof PLATE_PATHS !== 'undefined' && PLATE_PATHS[d.planche]) || {};
     Object.entries(trajets).forEach(([mid, pieces]) => {
       const actif = mid === d.canal;
+      if (!actif) return;
       pieces.forEach((pl) => {
         let dd = '';
         for (let i = 0; i < pl.length; i += 2) {
